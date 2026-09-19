@@ -1,0 +1,15 @@
+{"prompt":"rename the variable userNmae to userName in src/utils/format.ts","model":"haiku","effort":"low"}
+{"prompt":"what port does the dev server run on? check vite.config.ts","model":"haiku","effort":"low"}
+{"prompt":"add a --verbose flag to scripts/deploy.sh that prints each command before running it","model":"haiku","effort":"low"}
+{"prompt":"bump the node version in .nvmrc and the Dockerfile from 20 to 22","model":"haiku","effort":"low"}
+{"prompt":"add a GET /api/orders/:id endpoint following the same pattern as the existing /api/users/:id route, with tests","model":"sonnet","effort":"medium"}
+{"prompt":"the signup form throws 'TypeError: cannot read properties of undefined (reading email)' when submitted empty, fix it","model":"sonnet","effort":"medium"}
+{"prompt":"write unit tests for the existing cart total calculation in src/cart/","model":"sonnet","effort":"medium"}
+{"prompt":"replace moment.js with date-fns across the frontend, there are about 30 call sites","model":"sonnet","effort":"medium"}
+{"prompt":"the rounding in the invoice tax calculation is off by one cent in some cases, find and fix it. this is live billing code","model":"sonnet","effort":"high"}
+{"prompt":"users randomly get logged out in production, maybe once a day, no errors in the logs. find out why","model":"opus","effort":"high"}
+{"prompt":"refactor the notification module so email, sms and push share one interface instead of three copies of the same logic","model":"opus","effort":"medium"}
+{"prompt":"review this database schema design for the booking feature and tell me what will hurt us later","model":"opus","effort":"high"}
+{"prompt":"add role-based permissions to the admin panel. we have not decided how roles are stored yet","model":"opus","effort":"high"}
+{"prompt":"design the architecture for a multi-tenant version of our app: data isolation, billing per tenant, migration path from the current single-tenant database","model":"fable","effort":"high"}
+{"prompt":"our three bots step on each other's pull requests and nobody knows who owns what. work out what the actual problem is and propose how the whole workflow should change","model":"fable","effort":"high"}
