@@ -44,6 +44,10 @@ out="$(run good '   cx: fix it')"
 check "leading whitespace: decision" "$(jq -r .decision <<<"$out")" "block"
 check "leading whitespace: log prompt" "$(tail -1 "$tmp/log.jsonl" | jq -r .prompt)" "fix it"
 
+# 4c. multi-line prompt keeps the indentation of later lines
+run echoer "$(printf 'cx: fix this\n    if x:\n        y()')" >/dev/null
+check "multi-line: indentation kept" "$(cat "$tmp/seen")" "$(printf 'fix this\n    if x:\n        y()')"
+
 # 5. classifier fails -> block carries the error, log ok:false
 out="$(run bad 'cx: something')"
 check "bad: decision" "$(jq -r .decision <<<"$out")" "block"

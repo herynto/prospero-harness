@@ -10,12 +10,14 @@ classify="${HARNESS_CLASSIFY:-$dir/classify}"
 log="${HARNESS_LOG:-$dir/log.jsonl}"
 
 prompt="$(jq -r '.prompt // ""' 2>/dev/null)"
-prompt="$(printf '%s' "$prompt" | sed -e 's/^[[:space:]]*//')"
+# Trim leading whitespace of the whole prompt only; later lines keep their indentation.
+prompt="${prompt#"${prompt%%[![:space:]]*}"}"
 case "$prompt" in
   cx:*) ;;
   *) exit 0 ;;
 esac
-text="$(printf '%s' "${prompt#cx:}" | sed -e 's/^[[:space:]]*//')"
+text="${prompt#cx:}"
+text="${text#"${text%%[![:space:]]*}"}"
 
 now_ms() { perl -MTime::HiRes=time -e 'printf "%d", time*1000'; }
 start="$(now_ms)"
