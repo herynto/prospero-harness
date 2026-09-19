@@ -40,8 +40,9 @@ relabelling a case.
 ## Install
 
 The hook is registered in `~/.claude/settings.json` under
-`hooks.UserPromptSubmit` with `"timeout": 35`. To turn it off, delete that
-entry.
+`hooks.UserPromptSubmit` with `"timeout": 60`, well above the classifier's own
+30s budget so a hook killed before it prints its block JSON can't let the
+prompt run unclassified. To turn it off, delete that entry.
 
 ## Next stages
 

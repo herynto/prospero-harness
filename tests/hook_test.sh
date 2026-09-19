@@ -39,6 +39,11 @@ check "good: log has ts and ms" "$(tail -1 "$tmp/log.jsonl" | jq -r '(.ts|type)+
 run echoer 'cx:   rename foo' >/dev/null
 check "prefix stripped" "$(cat "$tmp/seen")" "rename foo"
 
+# 4b. leading whitespace before "cx:" still triggers the block
+out="$(run good '   cx: fix it')"
+check "leading whitespace: decision" "$(jq -r .decision <<<"$out")" "block"
+check "leading whitespace: log prompt" "$(tail -1 "$tmp/log.jsonl" | jq -r .prompt)" "fix it"
+
 # 5. classifier fails -> block carries the error, log ok:false
 out="$(run bad 'cx: something')"
 check "bad: decision" "$(jq -r .decision <<<"$out")" "block"
@@ -50,5 +55,9 @@ check "bad: log" "$(tail -1 "$tmp/log.jsonl" | jq -c '[.ok,.error,has("model")]'
 out="$(run garbage 'cx: something')"
 check "garbage: reason" "$(jq -r .reason <<<"$out")" "classification failed: classifier printed no valid verdict"
 check "garbage: log" "$(tail -1 "$tmp/log.jsonl" | jq -r .ok)" "false"
+
+# 7. non-JSON stdin -> silent exit, no jq parse error leaked
+out="$(printf 'not json' | HARNESS_CLASSIFY="$tmp/good" HARNESS_LOG="$tmp/log.jsonl" "$root/hook.sh" 2>&1)"
+check "non-JSON stdin: silent" "$out" ""
 
 finish

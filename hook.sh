@@ -9,7 +9,8 @@ dir="$(cd "$(dirname "$0")" && pwd)"
 classify="${HARNESS_CLASSIFY:-$dir/classify}"
 log="${HARNESS_LOG:-$dir/log.jsonl}"
 
-prompt="$(jq -r '.prompt // ""')"
+prompt="$(jq -r '.prompt // ""' 2>/dev/null)"
+prompt="$(printf '%s' "$prompt" | sed -e 's/^[[:space:]]*//')"
 case "$prompt" in
   cx:*) ;;
   *) exit 0 ;;
