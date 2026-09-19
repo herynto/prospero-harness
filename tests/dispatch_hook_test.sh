@@ -18,13 +18,25 @@ wait_log() { for _ in 1 2 3 4 5 6 7 8 9 10; do [ "$(wc -l < "$tmp/log.jsonl" 2>/
 out="$(run good '{"prompt":"implement task 1","description":"Task 1","subagent_type":"general-purpose"}')"
 check "fill: decision" "$(jq -r .hookSpecificOutput.permissionDecision <<<"$out")" "allow"
 check "fill: updated input" "$(jq -c .hookSpecificOutput.updatedInput <<<"$out")" \
-  '{"prompt":"implement task 1","description":"Task 1","subagent_type":"general-purpose","model":"sonnet"}'
-check "fill: log" "$(tail -1 "$tmp/log.jsonl" | jq -c '[.source,.ok,.model,.chosen,.applied]')" '["dispatch",true,"sonnet",null,true]'
+  '{"prompt":"implement task 1","description":"Task 1","subagent_type":"harness-medium","model":"sonnet"}'
+check "fill: log" "$(tail -1 "$tmp/log.jsonl" | jq -c '[.source,.ok,.model,.chosen,.applied,.agent]')" '["dispatch",true,"sonnet",null,true,"harness-medium"]'
+
+# 1b. other agent types keep their type, only the model is filled in
+out="$(run good '{"prompt":"find the routes","subagent_type":"Explore"}')"
+check "other type: updated input" "$(jq -c .hookSpecificOutput.updatedInput <<<"$out")" \
+  '{"prompt":"find the routes","subagent_type":"Explore","model":"sonnet"}'
+
+# 1c. general-purpose with a chosen model: model kept, agent swapped for effort
+out="$(run good '{"prompt":"implement task 3","model":"haiku"}')"
+check "effort only: updated input" "$(jq -c .hookSpecificOutput.updatedInput <<<"$out")" \
+  '{"prompt":"implement task 3","model":"haiku","subagent_type":"harness-medium"}'
+check "effort only: log" "$(tail -1 "$tmp/log.jsonl" | jq -c '[.chosen,.applied,.agent]')" '["haiku",false,"harness-medium"]'
 
 # 2. model already chosen -> no output, opinion logged in the background
-out="$(run good '{"prompt":"review the branch","model":"opus"}')"
+before="$(wc -l < "$tmp/log.jsonl")"
+out="$(run good '{"prompt":"review the branch","model":"opus","subagent_type":"Plan"}')"
 check "kept: no output" "$out" ""
-wait_log 1
+wait_log "$before"
 check "kept: log" "$(tail -1 "$tmp/log.jsonl" | jq -c '[.model,.chosen,.applied]')" '["sonnet","opus",false]'
 
 # 3. classifier fails -> dispatch runs unchanged, failure logged
