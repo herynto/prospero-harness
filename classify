@@ -4,7 +4,7 @@ set -uo pipefail
 
 dir="$(cd "$(dirname "$0")" && pwd)"
 claude_bin="${HARNESS_CLAUDE:-claude}"
-timeout_s="${HARNESS_TIMEOUT:-30}"
+timeout_s="${HARNESS_TIMEOUT:-45}"
 
 fail() { echo "classify: $1" >&2; exit 1; }
 
@@ -15,9 +15,14 @@ input="$(cat)"
 # The nested claude fires UserPromptSubmit too; hook.sh exits early on this.
 export HARNESS_CLASSIFYING=1
 
+# Only project settings: keeps the user's CLAUDE.md, plugins and hooks out of the
+# router call. The schema forces a verdict even when the task text reads like orders.
+schema='{"type":"object","properties":{"model":{"enum":["haiku","sonnet","opus","fable"]},"effort":{"enum":["low","medium","high"]},"reason":{"type":"string"}},"required":["model","effort","reason"],"additionalProperties":false}'
+
 raw="$(printf '<task>\n%s\n</task>' "$input" |
   perl -e 'alarm shift; exec @ARGV' "$timeout_s" "$claude_bin" -p \
     --model haiku --tools "" --strict-mcp-config \
+    --setting-sources project --no-session-persistence --json-schema "$schema" \
     --system-prompt-file "$dir/prompt.md" --output-format json 2>/dev/null)"
 rc=$?
 [ "$rc" -eq 142 ] && fail "timed out after ${timeout_s}s"
