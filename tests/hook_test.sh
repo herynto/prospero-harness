@@ -17,10 +17,12 @@ run() { # run <stub> <prompt>  -> prints hook stdout
     HARNESS_CLASSIFY="$tmp/$1" HARNESS_LOG="$tmp/log.jsonl" "$root/hook.sh"
 }
 
-# 1. no cx: prefix -> silent pass-through
+# 1. no cx: prefix -> no output, prompt not blocked, verdict logged in the background
 out="$(run good 'fix the login bug')"
 check "no prefix: no output" "$out" ""
-check "no prefix: no log" "$([ -e "$tmp/log.jsonl" ] && echo yes || echo no)" "no"
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$tmp/log.jsonl" ] && break; perl -e 'select(undef,undef,undef,0.2)'; done
+check "no prefix: logged as auto" "$(tail -1 "$tmp/log.jsonl" | jq -c '[.source,.ok,.model,.prompt]')" \
+  '["auto",true,"sonnet","fix the login bug"]'
 
 # 2. recursion guard
 out="$(jq -cn '{prompt:"cx: anything"}' |
@@ -31,8 +33,8 @@ check "guard: no output" "$out" ""
 out="$(run good 'cx: fix the login bug')"
 check "good: decision" "$(jq -r .decision <<<"$out")" "block"
 check "good: reason" "$(jq -r .reason <<<"$out")" "sonnet · medium — two files"
-check "good: log ok" "$(tail -1 "$tmp/log.jsonl" | jq -c '[.ok,.model,.effort,.reason,.prompt]')" \
-  '[true,"sonnet","medium","two files","fix the login bug"]'
+check "good: log ok" "$(tail -1 "$tmp/log.jsonl" | jq -c '[.source,.ok,.model,.effort,.reason,.prompt]')" \
+  '["cx",true,"sonnet","medium","two files","fix the login bug"]'
 check "good: log has ts and ms" "$(tail -1 "$tmp/log.jsonl" | jq -r '(.ts|type)+","+(.ms|type)')" "string,number"
 
 # 4. prefix is stripped before classifying

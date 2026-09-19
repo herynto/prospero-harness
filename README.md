@@ -7,7 +7,8 @@ A small agent harness for Claude Code, built one layer at a time.
 Type a prompt starting with `cx:` in Claude Code. A `UserPromptSubmit` hook
 sends the text to Haiku, which picks a model and a reasoning effort for the
 task. The verdict is shown and logged, and the prompt is blocked — the task
-does not run. Prompts without `cx:` are untouched.
+does not run. Prompts without `cx:` run as usual; they are classified in the background
+(no delay) and the verdict only goes to `log.jsonl` with `"source": "auto"`.
 
 ```
 cx: add a GET /api/orders/:id endpoint like the users one
@@ -17,7 +18,7 @@ cx: add a GET /api/orders/:id endpoint like the users one
 | File | Job |
 |------|-----|
 | `classify` | prompt on stdin → `{"model","effort","reason"}` on stdout; exits non-zero instead of guessing |
-| `hook.sh` | the hook: filters on `cx:`, calls `classify`, appends `log.jsonl`, blocks |
+| `hook.sh` | the hook: classifies every prompt into `log.jsonl`; `cx:` prompts also show the verdict and block |
 | `prompt.md` | the classification rules |
 | `log.jsonl` | every classification, git-ignored because it holds prompt text |
 
