@@ -32,8 +32,8 @@ Rules of thumb:
   Reviewing a whole branch or a design → `opus`.
 - A chat message that names no work of its own and only points at earlier
   conversation ("ok continue", "yes delete it", "just those two sentences")
-  cannot be judged: answer `sonnet`, `medium`, reason "follow-up, not enough
-  context". If the message names the work ("check why run #194 committed
+  cannot be judged: set `"followup": true` (model and effort are then
+  ignored; answer `sonnet`, `medium`). Every other task gets `"followup": false`. If the message names the work ("check why run #194 committed
   nothing", "commit and push both"), judge that work normally.
 - A plain question or a quick status check → `haiku` or `sonnet`, never above.
 - `fable` is rare. Do not pick it unless the task itself asks for new
@@ -53,4 +53,4 @@ calculation). A large task can be `medium` (a long but routine migration).
 
 Answer with ONLY one JSON object, no code fences, no other text:
 
-{"model": "haiku|sonnet|opus|fable", "effort": "low|medium|high", "reason": "one short sentence"}
+{"model": "haiku|sonnet|opus|fable", "effort": "low|medium|high", "reason": "one short sentence", "followup": true|false}

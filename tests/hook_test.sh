@@ -13,8 +13,8 @@ stub bad 'cat >/dev/null; echo "classify: timed out after 30s" >&2; exit 1'
 stub garbage 'cat >/dev/null; echo "not json"'
 
 run() { # run <stub> <prompt>  -> prints hook stdout
-  jq -cn --arg p "$2" '{prompt:$p}' |
-    HARNESS_CLASSIFY="$tmp/$1" HARNESS_LOG="$tmp/log.jsonl" "$root/hook.sh"
+  jq -cn --arg p "$2" '{prompt:$p, session_id:"s1"}' |
+    HARNESS_CLASSIFY="$tmp/$1" HARNESS_LOG="$tmp/log.jsonl" HARNESS_STATE="$tmp/state" "$root/hook.sh"
 }
 
 # 1. no cx: prefix -> no output, prompt not blocked, verdict logged in the background
@@ -49,6 +49,24 @@ check "leading whitespace: log prompt" "$(tail -1 "$tmp/log.jsonl" | jq -r .prom
 # 4c. multi-line prompt keeps the indentation of later lines
 run echoer "$(printf 'cx: fix this\n    if x:\n        y()')" >/dev/null
 check "multi-line: indentation kept" "$(cat "$tmp/seen")" "$(printf 'fix this\n    if x:\n        y()')"
+
+# 4d. short background follow-up inherits the last verdict without calling the classifier
+rm -f "$tmp/seen"; before="$(wc -l < "$tmp/log.jsonl")"
+run echoer 'ok continue' >/dev/null
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ "$(wc -l < "$tmp/log.jsonl")" -gt "$before" ] && break; perl -e 'select(undef,undef,undef,0.2)'; done
+check "short follow-up: classifier not called" "$([ -e "$tmp/seen" ] && echo called || echo skipped)" "skipped"
+check "short follow-up: inherited" "$(tail -1 "$tmp/log.jsonl" | jq -c '[.source,.model,.effort,.inherited_from]')" \
+  '["auto","haiku","low","fix this\n    if x:\n        y()"]'
+
+# 4e. classifier flags a longer message as follow-up -> inherited too
+stub flag 'cat >/dev/null; echo "{\"model\":\"sonnet\",\"effort\":\"medium\",\"reason\":\"x\",\"followup\":true}"'
+run flag 'cx: yes just keep those two sentences please' >/dev/null
+check "flagged follow-up: inherited" "$(tail -1 "$tmp/log.jsonl" | jq -c '[.model,.reason]')" '["haiku","follow-up, inherited"]'
+
+# 4f. follow-up in a session with no earlier verdict -> logged as skipped
+jq -cn '{prompt:"cx: yes just keep those two sentences please", session_id:"fresh"}' |
+  HARNESS_CLASSIFY="$tmp/flag" HARNESS_LOG="$tmp/log.jsonl" HARNESS_STATE="$tmp/state" "$root/hook.sh" >/dev/null
+check "nothing to inherit" "$(tail -1 "$tmp/log.jsonl" | jq -r .skipped)" "follow-up, nothing to inherit"
 
 # 5. classifier fails -> block carries the error, log ok:false
 out="$(run bad 'cx: something')"

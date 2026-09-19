@@ -14,7 +14,7 @@ run() { # run <fake> -> sets $out, $err, $rc
     "$root/classify" 2>"$tmp/err")"; rc=$?; err="$(cat "$tmp/err")"
 }
 
-good='{"model":"haiku","effort":"low","reason":"one file"}'
+good='{"model":"haiku","effort":"low","reason":"one file","followup":false}'
 fake ok "cat >/dev/null; cat <<'EOF'
 $(envelope "$good")
 EOF"
@@ -32,10 +32,10 @@ fake extra "cat >/dev/null; cat <<'EOF'
 $(envelope '{"model":"opus","effort":"high","reason":"r","agent":"x"}')
 EOF"
 run extra
-check "extra fields dropped" "$out" '{"model":"opus","effort":"high","reason":"r"}'
+check "extra fields dropped" "$out" '{"model":"opus","effort":"high","reason":"r","followup":false}'
 
 fake badmodel "cat >/dev/null; cat <<'EOF'
-$(envelope '{"model":"gpt","effort":"low","reason":"r"}')
+$(envelope '{"model":"gpt","effort":"low","reason":"r","followup":false}')
 EOF"
 run badmodel
 check "bad model: exit" "$rc" "1"
@@ -43,7 +43,7 @@ check "bad model: no stdout" "$out" ""
 check "bad model: message" "${err%%:*}" "classify"
 
 fake badeffort "cat >/dev/null; cat <<'EOF'
-$(envelope '{"model":"haiku","effort":"max","reason":"r"}')
+$(envelope '{"model":"haiku","effort":"max","reason":"r","followup":false}')
 EOF"
 run badeffort
 check "bad effort: exit" "$rc" "1"

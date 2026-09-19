@@ -17,7 +17,7 @@ export HARNESS_CLASSIFYING=1
 
 # Only project settings: keeps the user's CLAUDE.md, plugins and hooks out of the
 # router call. The schema forces a verdict even when the task text reads like orders.
-schema='{"type":"object","properties":{"model":{"enum":["haiku","sonnet","opus","fable"]},"effort":{"enum":["low","medium","high"]},"reason":{"type":"string"}},"required":["model","effort","reason"],"additionalProperties":false}'
+schema='{"type":"object","properties":{"model":{"enum":["haiku","sonnet","opus","fable"]},"effort":{"enum":["low","medium","high"]},"reason":{"type":"string"},"followup":{"type":"boolean"}},"required":["model","effort","reason","followup"],"additionalProperties":false}'
 
 raw="$(printf '<task>\n%s\n</task>' "$input" |
   perl -e 'alarm shift; exec @ARGV' "$timeout_s" "$claude_bin" -p \
@@ -39,7 +39,7 @@ verdict="$(jq -ce '
   | select((.model  | IN("haiku","sonnet","opus","fable"))
        and (.effort | IN("low","medium","high"))
        and (.reason | type == "string" and length > 0))
-  | {model, effort, reason}' <<<"$result" 2>/dev/null)" ||
+  | {model, effort, reason, followup: (.followup == true)}' <<<"$result" 2>/dev/null)" ||
   fail "invalid verdict: $(printf '%s' "$result" | tr '\n' ' ' | head -c 200)"
 
 printf '%s\n' "$verdict"

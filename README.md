@@ -10,6 +10,11 @@ task. The verdict is shown and logged, and the prompt is blocked — the task
 does not run. Prompts without `cx:` run as usual; they are classified in the background
 (no delay) and the verdict only goes to `log.jsonl` with `"source": "auto"`.
 
+Follow-ups ("ok continue") carry no work of their own. They reuse the last real
+verdict of the same session (kept in `state/<session_id>.json`) and are logged
+with `inherited_from`. Background prompts of three words or fewer skip the model
+call; longer ones are flagged by the classifier through `"followup": true`.
+
 ```
 cx: add a GET /api/orders/:id endpoint like the users one
 → sonnet · medium — follows an existing pattern across a few files
