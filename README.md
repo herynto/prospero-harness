@@ -23,6 +23,7 @@ cx: add a GET /api/orders/:id endpoint like the users one
 | File | Job |
 |------|-----|
 | `classify` | prompt on stdin → `{"model","effort","reason"}` on stdout; exits non-zero instead of guessing |
+| `dispatch-hook.sh` | `PreToolUse` hook on `Agent\|Task`: fills in the classifier's model when a subagent dispatch names none; a chosen model is kept and only compared in the log (`"source": "dispatch"`, `chosen`, `applied`). Fails open. |
 | `hook.sh` | the hook: classifies every prompt into `log.jsonl`; `cx:` prompts also show the verdict and block |
 | `prompt.md` | the classification rules |
 | `log.jsonl` | every classification, git-ignored because it holds prompt text |

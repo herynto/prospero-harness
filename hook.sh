@@ -79,6 +79,7 @@ classify_and_log() {
 
 case "$prompt" in
   cx:*) ;;
+  \<*) exit 0 ;;  # harness-generated turns (agent reports, notifications), not typed prompts
   *)
     # Ordinary prompt: classify in the background for the log only, never delay or block it.
     ( classify_and_log auto "$prompt" ) </dev/null >/dev/null 2>&1 &

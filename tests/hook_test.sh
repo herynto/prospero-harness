@@ -24,6 +24,12 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$tmp/log.jsonl" ] && break; perl -e 'sel
 check "no prefix: logged as auto" "$(tail -1 "$tmp/log.jsonl" | jq -c '[.source,.ok,.model,.prompt]')" \
   '["auto",true,"sonnet","fix the login bug"]'
 
+# 1b. harness-generated turns are not logged
+before="$(wc -l < "$tmp/log.jsonl")"
+run good '<agent-message from="x">report text here</agent-message>' >/dev/null
+perl -e 'select(undef,undef,undef,0.6)'
+check "generated turn: not logged" "$(wc -l < "$tmp/log.jsonl")" "$before"
+
 # 2. recursion guard
 out="$(jq -cn '{prompt:"cx: anything"}' |
   HARNESS_CLASSIFYING=1 HARNESS_CLASSIFY="$tmp/good" HARNESS_LOG="$tmp/log.jsonl" "$root/hook.sh")"
