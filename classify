@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Prompt text on stdin -> {"model","effort","reason"} on stdout. Never guesses.
+set -uo pipefail
+
+dir="$(cd "$(dirname "$0")" && pwd)"
+claude_bin="${HARNESS_CLAUDE:-claude}"
+timeout_s="${HARNESS_TIMEOUT:-30}"
+
+fail() { echo "classify: $1" >&2; exit 1; }
+
+command -v "$claude_bin" >/dev/null 2>&1 || fail "claude not found"
+input="$(cat)"
+[ -n "${input//[[:space:]]/}" ] || fail "empty prompt"
+
+# The nested claude fires UserPromptSubmit too; hook.sh exits early on this.
+export HARNESS_CLASSIFYING=1
+
+raw="$(printf '<task>\n%s\n</task>' "$input" |
+  perl -e 'alarm shift; exec @ARGV' "$timeout_s" "$claude_bin" -p \
+    --model haiku --tools "" --strict-mcp-config \
+    --system-prompt-file "$dir/prompt.md" --output-format json 2>/dev/null)"
+rc=$?
+[ "$rc" -eq 142 ] && fail "timed out after ${timeout_s}s"
+[ "$rc" -eq 0 ] || fail "claude exited $rc"
+
+result="$(jq -er 'select(.is_error == false) | .result' <<<"$raw" 2>/dev/null)" ||
+  fail "claude returned an error"
+
+# Models sometimes wrap JSON in ``` fences despite instructions.
+result="$(printf '%s\n' "$result" | sed -e '/^```/d')"
+
+verdict="$(jq -ce '
+  select(type == "object")
+  | select((.model  | IN("haiku","sonnet","opus","fable"))
+       and (.effort | IN("low","medium","high"))
+       and (.reason | type == "string" and length > 0))
+  | {model, effort, reason}' <<<"$result" 2>/dev/null)" ||
+  fail "invalid verdict: $(printf '%s' "$result" | tr '\n' ' ' | head -c 200)"
+
+printf '%s\n' "$verdict"
