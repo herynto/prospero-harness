@@ -11,6 +11,9 @@ fit for it; the workers it dispatches are called Ariel.
 - Every prompt you type is judged in the background, for the log only. It is
   never delayed or changed. Start a prompt with `cx:` to see the verdict
   instead of running it.
+- Each session starts with a subagent-first policy: exploring and searching go
+  to a subagent by default, `general-purpose`, with no model named — so there is
+  work for the judge to do.
 - It fails open: if the judge fails or times out, the dispatch runs unchanged.
 
 ```
@@ -54,6 +57,7 @@ costs no tokens. From inside Claude Code use `! prospero-config …`.
 | `prospero-config mode [name]` | how the judge weighs doubt: `balanced`, `cheap`, `quality` |
 | `prospero-config switch override_chosen true` | also replace a model the session picked itself |
 | `prospero-config switch swap_agents false` | stop retargeting to `ariel-*`; only the model is filled in |
+| `prospero-config switch subagent_first false` | stop stating the subagent-first policy at session start |
 | `prospero-config reset` | back to defaults |
 
 No access to `fable`? Map it away once:
@@ -69,9 +73,11 @@ noted as `config_error` in the log.
 
 | File | Job |
 |------|-----|
-| `hooks/hooks.json` | registers the two hooks below |
+| `hooks/hooks.json` | registers the three hooks below |
 | `hook.sh` | `UserPromptSubmit`: judges every prompt into the log; `cx:` prompts show the verdict and block. Follow-ups ("ok continue") reuse the session's last verdict: three words or fewer skip the model call, longer ones are flagged by the judge through `"followup": true`. |
 | `dispatch-hook.sh` | `PreToolUse` on `Agent\|Task`: fills in the model, retargets `general-purpose` to `ariel-<effort>`. Other agent types are untouched. |
+| `policy-hook.sh` | `SessionStart`: states the subagent-first policy from `policy.md`. Claude Code otherwise holds the Agent tool back unless asked, so there is little for the dispatch hook to judge. |
+| `policy.md` | that policy |
 | `classify` | text on stdin → `{"model","effort","reason","followup","mode"}` on stdout; exits non-zero instead of guessing |
 | `prompt.md` | the judging rules |
 | `modes/<name>.md` | extra rules appended to `prompt.md` when that mode is active, so the judge itself takes a different stance. Any new file here becomes a mode; unknown names fall back to `balanced`. `PROSPERO_MODE` sets it for one call. |
@@ -93,9 +99,9 @@ own scripted `claude -p` calls to keep Prospero off them.
 
 ## Without the plugin system
 
-Point `hooks.UserPromptSubmit` and `hooks.PreToolUse` (matcher `Agent|Task`,
-`"timeout": 60`) in `~/.claude/settings.json` at `hook.sh` and
-`dispatch-hook.sh`, and link the agents:
+Point `hooks.UserPromptSubmit`, `hooks.PreToolUse` (matcher `Agent|Task`,
+`"timeout": 60`) and `hooks.SessionStart` in `~/.claude/settings.json` at
+`hook.sh`, `dispatch-hook.sh` and `policy-hook.sh`, and link the agents:
 `ln -s "$PWD"/agents/ariel-*.md ~/.claude/agents/`. The agents are then named
 `ariel-*` without the `prospero:` prefix, which the hook handles.
 

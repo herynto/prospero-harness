@@ -101,11 +101,11 @@ check "cli: unknown mode rejected" "$("$root/bin/prospero-config" mode turbo >/d
 check "cli: reset" "$(jq -c '[.pairs["opus/medium"],.override_chosen,.mode]' "$tmp/cli.json")" '["opus/medium",false,"balanced"]'
 
 # 10. config edit, keys fed on stdin: down x7 -> opus/medium, Enter, down x3 -> fable, Enter,
-#     Enter -> low, then q. Then: up x4 from the top wraps to override_chosen, Enter, q.
+#     Enter -> low, then q. Then: up x5 from the top wraps to override_chosen, Enter, q.
 D=$'\033[B'; U=$'\033[A'
 printf '%s' "$D$D$D$D$D$D$D" $'\n' "$D$D$D" $'\n' $'\n' q | PROSPERO_MENU_TEST=1 "$root/bin/prospero-config" edit 2>/dev/null
 check "edit: pair set" "$(jq -r '.pairs["opus/medium"]' "$tmp/cli.json")" "fable/low"
-printf '%s' "$U$U$U$U" $'\n' q | PROSPERO_MENU_TEST=1 "$root/bin/prospero-config" edit 2>/dev/null
+printf '%s' "$U$U$U$U$U" $'\n' q | PROSPERO_MENU_TEST=1 "$root/bin/prospero-config" edit 2>/dev/null
 check "edit: switch toggled" "$(jq -r .override_chosen "$tmp/cli.json")" "true"
 # down x12 -> mode row, Enter, down x2 -> quality, Enter, q
 printf '%s' "$D$D$D$D$D$D$D$D$D$D$D$D" $'\n' "$D$D" $'\n' q | PROSPERO_MENU_TEST=1 "$root/bin/prospero-config" edit 2>/dev/null

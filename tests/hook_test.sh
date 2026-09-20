@@ -95,4 +95,11 @@ check "garbage: log" "$(tail -1 "$tmp/log.jsonl" | jq -r .ok)" "false"
 out="$(printf 'not json' | PROSPERO_CLASSIFY="$tmp/good" PROSPERO_LOG="$tmp/log.jsonl" "$root/hook.sh" 2>&1)"
 check "non-JSON stdin: silent" "$out" ""
 
+# 8. policy hook: states the policy, and stays quiet when switched off
+out="$(PROSPERO_CONFIG="$tmp/policy-cfg.json" "$root/policy-hook.sh")"
+check "policy: event" "$(jq -r .hookSpecificOutput.hookEventName <<<"$out")" "SessionStart"
+check "policy: text" "$(jq -r .hookSpecificOutput.additionalContext <<<"$out" | head -1)" "## Subagents"
+echo '{"subagent_first":false}' > "$tmp/policy-cfg.json"
+check "policy: off" "$(PROSPERO_CONFIG="$tmp/policy-cfg.json" "$root/policy-hook.sh")" ""
+
 finish

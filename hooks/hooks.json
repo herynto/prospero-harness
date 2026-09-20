@@ -1,12 +1,37 @@
 {
   "hooks": {
     "UserPromptSubmit": [
-      { "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hook.sh", "timeout": 60 }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hook.sh",
+            "timeout": 60
+          }
+        ]
+      }
     ],
     "PreToolUse": [
       {
         "matcher": "Agent|Task",
-        "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/dispatch-hook.sh", "timeout": 60 }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/dispatch-hook.sh",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/policy-hook.sh",
+            "timeout": 10
+          }
+        ]
       }
     ]
   }

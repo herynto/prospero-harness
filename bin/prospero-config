@@ -2,7 +2,7 @@
 # Show or change config.json, the preferences dispatch-hook.sh applies to each verdict.
 #   prospero-config show                      table of every pair and both switches
 #   prospero-config set <from> <to>           e.g. config set opus/medium fable/low
-#   prospero-config switch <name> <true|false>   name: override_chosen | swap_agents
+#   prospero-config switch <name> <true|false>   name: override_chosen | swap_agents | subagent_first
 #   prospero-config mode [name]               how the classifier weighs doubt: balanced, or any modes/<name>.md
 #   prospero-config reset                     every pair maps to itself, switches back to default
 #   prospero-config edit                      arrow-key menu for all of the above; run it in a terminal
@@ -20,7 +20,7 @@ pair='^(haiku|sonnet|opus|fable)/(low|medium|high)$'
 
 defaults() {
   jq -n '{pairs: ([("haiku","sonnet","opus","fable") as $m | ("low","medium","high") as $e
-    | {key:"\($m)/\($e)", value:"\($m)/\($e)"}] | from_entries), mode:"balanced", override_chosen:false, swap_agents:true}'
+    | {key:"\($m)/\($e)", value:"\($m)/\($e)"}] | from_entries), mode:"balanced", override_chosen:false, swap_agents:true, subagent_first:true}'
 }
 modes() { echo balanced; for f in "$dir"/modes/*.md; do [ -f "$f" ] && basename "$f" .md; done; }
 mode_now() { jq -r '.mode // "balanced"' "$file"; }
@@ -60,19 +60,19 @@ edit() {
       k="$m/$e"; v="$(jq -r --arg k "$k" '.pairs[$k] // $k' "$file")"
       keys+=("$k"); rows+=("$(printf '%-14s -> %-14s%s' "$k" "$v" "$([ "$v" = "$k" ] || echo ' *')")")
     done; done
-    rows+=("mode            = $(mode_now)" "override_chosen = $(jq -r '.override_chosen == true' "$file")" "swap_agents     = $(jq -r '.swap_agents != false' "$file")" "Reset everything" "Quit")
+    rows+=("mode            = $(mode_now)" "override_chosen = $(jq -r '.override_chosen == true' "$file")" "swap_agents     = $(jq -r '.swap_agents != false' "$file")" "subagent_first  = $(jq -r '.subagent_first != false' "$file")" "Reset everything" "Quit")
     menu "Prospero preferences: verdict -> what runs   (Enter change, q quit)" "${rows[@]}"
     case "$MENU_IDX" in
-      -1|16) return 0 ;;
+      -1|17) return 0 ;;
       12)
         set -- $(modes); menu "Classifier mode (now: $(mode_now))" "$@"; [ "$MENU_IDX" -ge 0 ] || continue
         shift "$MENU_IDX"; jq --arg v "$1" '.mode = $v' "$file" | save ;;
-      13|14)
-        [ "$MENU_IDX" -eq 13 ] && k=override_chosen || k=swap_agents
-        on="$(jq -r --arg k "$k" 'if $k == "swap_agents" then .[$k] != false else .[$k] == true end' "$file")"
+      13|14|15)
+        case "$MENU_IDX" in 13) k=override_chosen ;; 14) k=swap_agents ;; *) k=subagent_first ;; esac
+        on="$(jq -r --arg k "$k" 'if $k == "override_chosen" then .[$k] == true else .[$k] != false end' "$file")"
         [ "$on" = true ] && on=false || on=true
         jq --arg k "$k" --argjson v "$on" '.[$k] = $v' "$file" | save ;;
-      15) menu "Reset every pair and both switches?" "No" "Yes"; [ "$MENU_IDX" -eq 1 ] && defaults | save ;;
+      16) menu "Reset every pair and all switches?" "No" "Yes"; [ "$MENU_IDX" -eq 1 ] && defaults | save ;;
       *)
         k="${keys[$MENU_IDX]}"
         menu "$k: which model should run instead?" $models; [ "$MENU_IDX" -ge 0 ] || continue
@@ -92,13 +92,13 @@ case "${1:-show}" in
     defaults | jq -r --slurpfile c "$file" '
       (.pairs | keys_unsorted[]) as $k | ($c[0].pairs[$k] // $k) as $v
       | "\($k)\t->\t\($v)" + (if $v == $k then "" else "\t*" end)' | column -t -s "$(printf '\t')"
-    jq -r '"mode            = \(.mode // "balanced")\noverride_chosen = \(.override_chosen == true)\nswap_agents     = \(.swap_agents != false)"' "$file" ;;
+    jq -r '"mode            = \(.mode // "balanced")\noverride_chosen = \(.override_chosen == true)\nswap_agents     = \(.swap_agents != false)\nsubagent_first  = \(.subagent_first != false)"' "$file" ;;
   set)
     [[ "${2:-}" =~ $pair ]] || die "bad pair '${2:-}', want <model>/<effort>, e.g. opus/medium"
     [[ "${3:-}" =~ $pair ]] || die "bad pair '${3:-}', want <model>/<effort>, e.g. fable/low"
     jq --arg k "$2" --arg v "$3" '.pairs[$k] = $v' "$file" | save; echo "$2 -> $3" ;;
   switch)
-    case "${2:-}" in override_chosen|swap_agents) ;; *) die "unknown switch '${2:-}'" ;; esac
+    case "${2:-}" in override_chosen|swap_agents|subagent_first) ;; *) die "unknown switch '${2:-}'" ;; esac
     case "${3:-}" in true|false) ;; *) die "value must be true or false" ;; esac
     jq --arg k "$2" --argjson v "$3" '.[$k] = $v' "$file" | save; echo "$2 = $3" ;;
   mode)
