@@ -4,6 +4,7 @@
 #   config set <from> <to>           e.g. config set opus/medium fable/low
 #   config switch <name> <true|false>   name: override_chosen | swap_agents
 #   config reset                     every pair maps to itself, switches back to default
+#   config edit                      arrow-key menu for all of the above; run it in a terminal
 set -uo pipefail
 dir="$(cd "$(dirname "$0")" && pwd)"
 file="${HARNESS_CONFIG:-$dir/config.json}"
@@ -15,6 +16,60 @@ defaults() {
 }
 save() { local tmp; tmp="$(mktemp)"; cat > "$tmp" && mv "$tmp" "$file"; }
 die() { echo "config: $*" >&2; exit 1; }
+
+# menu <title> <option>...: arrow keys or j/k move, Enter picks, q goes back.
+# Sets MENU_IDX to the picked index, or -1. Draws on stderr, reads keys from stdin.
+menu() {
+  local title="$1" key rest i n cur=0; shift; n=$#
+  MENU_IDX=-1
+  while :; do
+    printf '\033[1m%s\033[0m\n' "$title" >&2
+    i=0; for opt in "$@"; do
+      if [ "$i" -eq "$cur" ]; then printf '\033[7m> %s\033[0m\n' "$opt" >&2; else printf '  %s\n' "$opt" >&2; fi
+      i=$((i+1))
+    done
+    IFS= read -rsn1 key || return 0
+    if [ "$key" = $'\033' ]; then IFS= read -rsn2 -t 1 rest || rest=""; key="$key$rest"; fi
+    case "$key" in
+      $'\033[A'|k) cur=$(( (cur + n - 1) % n )) ;;
+      $'\033[B'|j) cur=$(( (cur + 1) % n )) ;;
+      "") MENU_IDX=$cur; key=done ;;
+      q|$'\033') key=done ;;
+    esac
+    printf '\033[%dA\033[J' "$((n+1))" >&2
+    [ "$key" = done ] && return 0
+  done
+}
+
+edit() {
+  [ -t 0 ] || [ -n "${HARNESS_MENU_TEST:-}" ] || die "edit needs a terminal; from Claude Code use: config set <from> <to>"
+  local models="haiku sonnet opus fable" efforts="low medium high" keys=() rows=() k v m e on
+  while :; do
+    keys=(); rows=()
+    for m in $models; do for e in $efforts; do
+      k="$m/$e"; v="$(jq -r --arg k "$k" '.pairs[$k] // $k' "$file")"
+      keys+=("$k"); rows+=("$(printf '%-14s -> %-14s%s' "$k" "$v" "$([ "$v" = "$k" ] || echo ' *')")")
+    done; done
+    rows+=("override_chosen = $(jq -r '.override_chosen == true' "$file")" "swap_agents     = $(jq -r '.swap_agents != false' "$file")" "Reset everything" "Quit")
+    menu "Harness preferences: verdict -> what runs   (Enter change, q quit)" "${rows[@]}"
+    case "$MENU_IDX" in
+      -1|15) return 0 ;;
+      12|13)
+        [ "$MENU_IDX" -eq 12 ] && k=override_chosen || k=swap_agents
+        on="$(jq -r --arg k "$k" 'if $k == "swap_agents" then .[$k] != false else .[$k] == true end' "$file")"
+        [ "$on" = true ] && on=false || on=true
+        jq --arg k "$k" --argjson v "$on" '.[$k] = $v' "$file" | save ;;
+      14) menu "Reset every pair and both switches?" "No" "Yes"; [ "$MENU_IDX" -eq 1 ] && defaults | save ;;
+      *)
+        k="${keys[$MENU_IDX]}"
+        menu "$k: which model should run instead?" $models; [ "$MENU_IDX" -ge 0 ] || continue
+        set -- $models; shift "$MENU_IDX"; m="$1"
+        menu "$k -> $m: at which effort?" $efforts; [ "$MENU_IDX" -ge 0 ] || continue
+        set -- $efforts; shift "$MENU_IDX"; e="$1"
+        jq --arg k "$k" --arg v "$m/$e" '.pairs[$k] = $v' "$file" | save ;;
+    esac
+  done
+}
 
 [ -s "$file" ] || defaults | save
 jq -e 'type == "object"' "$file" >/dev/null 2>&1 || die "$file is not valid JSON; run: config reset"
@@ -34,5 +89,6 @@ case "${1:-show}" in
     case "${3:-}" in true|false) ;; *) die "value must be true or false" ;; esac
     jq --arg k "$2" --argjson v "$3" '.[$k] = $v' "$file" | save; echo "$2 = $3" ;;
   reset) defaults | save; echo "reset" ;;
-  *) die "usage: config show | set <from> <to> | switch <name> <true|false> | reset" ;;
+  edit) edit ;;
+  *) die "usage: config show | edit | set <from> <to> | switch <name> <true|false> | reset" ;;
 esac

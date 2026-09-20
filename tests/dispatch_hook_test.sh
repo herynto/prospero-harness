@@ -90,4 +90,14 @@ check "cli: switch" "$(jq -r .override_chosen "$tmp/cli.json")" "true"
 "$root/config" reset >/dev/null
 check "cli: reset" "$(jq -c '[.pairs["opus/medium"],.override_chosen]' "$tmp/cli.json")" '["opus/medium",false]'
 
+# 10. config edit, keys fed on stdin: down x7 -> opus/medium, Enter, down x3 -> fable, Enter,
+#     Enter -> low, then q. Then: up x4 from the top wraps to override_chosen, Enter, q.
+D=$'\033[B'; U=$'\033[A'
+printf '%s' "$D$D$D$D$D$D$D" $'\n' "$D$D$D" $'\n' $'\n' q | HARNESS_MENU_TEST=1 "$root/config" edit 2>/dev/null
+check "edit: pair set" "$(jq -r '.pairs["opus/medium"]' "$tmp/cli.json")" "fable/low"
+printf '%s' "$U$U$U$U" $'\n' q | HARNESS_MENU_TEST=1 "$root/config" edit 2>/dev/null
+check "edit: switch toggled" "$(jq -r .override_chosen "$tmp/cli.json")" "true"
+check "edit: needs a terminal" "$("$root/config" edit </dev/null 2>&1 | head -1)" \
+  "config: edit needs a terminal; from Claude Code use: config set <from> <to>"
+
 finish
