@@ -29,7 +29,7 @@ about 10 seconds. Nested subagents are judged at every layer.
 Needs `bash`, `jq`, `perl` and the `claude` CLI on `PATH`.
 
 ```
-/plugin marketplace add <owner>/prospero
+/plugin marketplace add herynto/prospero-harness
 /plugin install prospero@prospero
 ```
 
@@ -113,3 +113,7 @@ verdict is more than one tier off. Fix misses in `prompt.md`, never by
 relabelling a case. `PROSPERO_MODE=quality tests/run.sh` scores another mode
 against the same labels, which were written for `balanced`; read it as "how far
 does this mode move", not pass/fail.
+
+## License
+
+MIT, see `LICENSE`.

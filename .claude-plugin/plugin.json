@@ -3,5 +3,6 @@
   "version": "0.1.0",
   "description": "Judges every prompt and subagent brief with Haiku, then gives each subagent dispatch the model and reasoning effort the work deserves.",
   "author": { "name": "Heryanto" },
+  "license": "MIT",
   "keywords": ["subagents", "model-routing", "hooks"]
 }
