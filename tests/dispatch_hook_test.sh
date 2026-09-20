@@ -87,8 +87,12 @@ check "cli: show marks change" "$("$root/config" show | grep -c '\*')" "1"
 check "cli: bad pair rejected" "$("$root/config" set opus/medum fable/low 2>&1; echo $?)" "$(printf "config: bad pair 'opus/medum', want <model>/<effort>, e.g. opus/medium\n1")"
 "$root/config" switch override_chosen true >/dev/null
 check "cli: switch" "$(jq -r .override_chosen "$tmp/cli.json")" "true"
+"$root/config" mode quality >/dev/null
+check "cli: mode" "$(jq -r .mode "$tmp/cli.json")" "quality"
+check "cli: mode list" "$("$root/config" mode | tr '\n' ',')" "  balanced,  cheap,* quality,"
+check "cli: unknown mode rejected" "$("$root/config" mode turbo >/dev/null 2>&1; echo $?)" "1"
 "$root/config" reset >/dev/null
-check "cli: reset" "$(jq -c '[.pairs["opus/medium"],.override_chosen]' "$tmp/cli.json")" '["opus/medium",false]'
+check "cli: reset" "$(jq -c '[.pairs["opus/medium"],.override_chosen,.mode]' "$tmp/cli.json")" '["opus/medium",false,"balanced"]'
 
 # 10. config edit, keys fed on stdin: down x7 -> opus/medium, Enter, down x3 -> fable, Enter,
 #     Enter -> low, then q. Then: up x4 from the top wraps to override_chosen, Enter, q.
@@ -97,6 +101,9 @@ printf '%s' "$D$D$D$D$D$D$D" $'\n' "$D$D$D" $'\n' $'\n' q | HARNESS_MENU_TEST=1 
 check "edit: pair set" "$(jq -r '.pairs["opus/medium"]' "$tmp/cli.json")" "fable/low"
 printf '%s' "$U$U$U$U" $'\n' q | HARNESS_MENU_TEST=1 "$root/config" edit 2>/dev/null
 check "edit: switch toggled" "$(jq -r .override_chosen "$tmp/cli.json")" "true"
+# down x12 -> mode row, Enter, down x2 -> quality, Enter, q
+printf '%s' "$D$D$D$D$D$D$D$D$D$D$D$D" $'\n' "$D$D" $'\n' q | HARNESS_MENU_TEST=1 "$root/config" edit 2>/dev/null
+check "edit: mode set" "$(jq -r .mode "$tmp/cli.json")" "quality"
 check "edit: needs a terminal" "$("$root/config" edit </dev/null 2>&1 | head -1)" \
   "config: edit needs a terminal; from Claude Code use: config set <from> <to>"
 

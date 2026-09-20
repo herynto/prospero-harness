@@ -3,6 +3,7 @@
 #   config show                      table of every pair and both switches
 #   config set <from> <to>           e.g. config set opus/medium fable/low
 #   config switch <name> <true|false>   name: override_chosen | swap_agents
+#   config mode [name]               how the classifier weighs doubt: balanced, or any modes/<name>.md
 #   config reset                     every pair maps to itself, switches back to default
 #   config edit                      arrow-key menu for all of the above; run it in a terminal
 set -uo pipefail
@@ -12,8 +13,10 @@ pair='^(haiku|sonnet|opus|fable)/(low|medium|high)$'
 
 defaults() {
   jq -n '{pairs: ([("haiku","sonnet","opus","fable") as $m | ("low","medium","high") as $e
-    | {key:"\($m)/\($e)", value:"\($m)/\($e)"}] | from_entries), override_chosen:false, swap_agents:true}'
+    | {key:"\($m)/\($e)", value:"\($m)/\($e)"}] | from_entries), mode:"balanced", override_chosen:false, swap_agents:true}'
 }
+modes() { echo balanced; for f in "$dir"/modes/*.md; do [ -f "$f" ] && basename "$f" .md; done; }
+mode_now() { jq -r '.mode // "balanced"' "$file"; }
 save() { local tmp; tmp="$(mktemp)"; cat > "$tmp" && mv "$tmp" "$file"; }
 die() { echo "config: $*" >&2; exit 1; }
 
@@ -50,16 +53,19 @@ edit() {
       k="$m/$e"; v="$(jq -r --arg k "$k" '.pairs[$k] // $k' "$file")"
       keys+=("$k"); rows+=("$(printf '%-14s -> %-14s%s' "$k" "$v" "$([ "$v" = "$k" ] || echo ' *')")")
     done; done
-    rows+=("override_chosen = $(jq -r '.override_chosen == true' "$file")" "swap_agents     = $(jq -r '.swap_agents != false' "$file")" "Reset everything" "Quit")
+    rows+=("mode            = $(mode_now)" "override_chosen = $(jq -r '.override_chosen == true' "$file")" "swap_agents     = $(jq -r '.swap_agents != false' "$file")" "Reset everything" "Quit")
     menu "Harness preferences: verdict -> what runs   (Enter change, q quit)" "${rows[@]}"
     case "$MENU_IDX" in
-      -1|15) return 0 ;;
-      12|13)
-        [ "$MENU_IDX" -eq 12 ] && k=override_chosen || k=swap_agents
+      -1|16) return 0 ;;
+      12)
+        set -- $(modes); menu "Classifier mode (now: $(mode_now))" "$@"; [ "$MENU_IDX" -ge 0 ] || continue
+        shift "$MENU_IDX"; jq --arg v "$1" '.mode = $v' "$file" | save ;;
+      13|14)
+        [ "$MENU_IDX" -eq 13 ] && k=override_chosen || k=swap_agents
         on="$(jq -r --arg k "$k" 'if $k == "swap_agents" then .[$k] != false else .[$k] == true end' "$file")"
         [ "$on" = true ] && on=false || on=true
         jq --arg k "$k" --argjson v "$on" '.[$k] = $v' "$file" | save ;;
-      14) menu "Reset every pair and both switches?" "No" "Yes"; [ "$MENU_IDX" -eq 1 ] && defaults | save ;;
+      15) menu "Reset every pair and both switches?" "No" "Yes"; [ "$MENU_IDX" -eq 1 ] && defaults | save ;;
       *)
         k="${keys[$MENU_IDX]}"
         menu "$k: which model should run instead?" $models; [ "$MENU_IDX" -ge 0 ] || continue
@@ -79,7 +85,7 @@ case "${1:-show}" in
     defaults | jq -r --slurpfile c "$file" '
       (.pairs | keys_unsorted[]) as $k | ($c[0].pairs[$k] // $k) as $v
       | "\($k)\t->\t\($v)" + (if $v == $k then "" else "\t*" end)' | column -t -s "$(printf '\t')"
-    jq -r '"override_chosen = \(.override_chosen == true)\nswap_agents     = \(.swap_agents != false)"' "$file" ;;
+    jq -r '"mode            = \(.mode // "balanced")\noverride_chosen = \(.override_chosen == true)\nswap_agents     = \(.swap_agents != false)"' "$file" ;;
   set)
     [[ "${2:-}" =~ $pair ]] || die "bad pair '${2:-}', want <model>/<effort>, e.g. opus/medium"
     [[ "${3:-}" =~ $pair ]] || die "bad pair '${3:-}', want <model>/<effort>, e.g. fable/low"
@@ -88,7 +94,14 @@ case "${1:-show}" in
     case "${2:-}" in override_chosen|swap_agents) ;; *) die "unknown switch '${2:-}'" ;; esac
     case "${3:-}" in true|false) ;; *) die "value must be true or false" ;; esac
     jq --arg k "$2" --argjson v "$3" '.[$k] = $v' "$file" | save; echo "$2 = $3" ;;
+  mode)
+    if [ -z "${2:-}" ]; then
+      for m in $(modes); do [ "$m" = "$(mode_now)" ] && echo "* $m" || echo "  $m"; done
+    else
+      modes | grep -qx -- "$2" || die "unknown mode '$2', have: $(modes | tr '\n' ' ')"
+      jq --arg v "$2" '.mode = $v' "$file" | save; echo "mode = $2"
+    fi ;;
   reset) defaults | save; echo "reset" ;;
   edit) edit ;;
-  *) die "usage: config show | edit | set <from> <to> | switch <name> <true|false> | reset" ;;
+  *) die "usage: config show | edit | set <from> <to> | mode [name] | switch <name> <true|false> | reset" ;;
 esac

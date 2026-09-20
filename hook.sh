@@ -63,7 +63,7 @@ classify_and_log() {
       inherit_and_log "$source" "$text" "$ms"
       return
     fi
-    verdict="$(jq -c '{model,effort,reason}' <<<"$verdict")"
+    verdict="$(jq -c '{model,effort,reason} + (if .mode then {mode} else {} end)' <<<"$verdict")"
     mkdir -p "$(dirname "$state")"
     jq -cn --arg prompt "$text" --argjson v "$verdict" '$v + {prompt:$prompt}' > "$state"
     jq -cn --arg ts "$ts" --arg source "$source" --arg prompt "$text" --argjson v "$verdict" --argjson ms "$ms" \

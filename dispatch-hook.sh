@@ -52,7 +52,7 @@ judge() {
     jq -cn --arg ts "$ts" --arg prompt "$brief" --arg chosen "$chosen" --arg kept "$chosen_kept" --argjson swap "$swap" \
        --arg final "$final" --arg cfgerr "$cfgerr" --argjson v "$verdict" --argjson ms "$ms" \
       '($final | split("/")) as $f
-       | {ts:$ts, source:"dispatch", prompt:$prompt[0:2000], ok:true} + ($v | {model,effort,reason})
+       | {ts:$ts, source:"dispatch", prompt:$prompt[0:2000], ok:true} + ($v | {model,effort,reason} + (if .mode then {mode} else {} end))
        + {final_model:(if $kept == "" then $f[0] else $kept end), final_effort:(if $swap == 1 then $f[1] else null end),
           chosen:(if $chosen == "" then null else $chosen end), applied:($kept == ""),
           agent:(if $swap == 1 then "harness-" + $f[1] else null end), ms:$ms}

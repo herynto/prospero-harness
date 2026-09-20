@@ -1,16 +1,27 @@
 #!/usr/bin/env bash
-# Prompt text on stdin -> {"model","effort","reason"} on stdout. Never guesses.
+# Prompt text on stdin -> {"model","effort","reason","followup","mode"} on stdout. Never
+# guesses. The mode (config.json "mode", or HARNESS_MODE) appends modes/<mode>.md to the
+# rules in prompt.md; "balanced" and unknown names add nothing.
 set -uo pipefail
 
 dir="$(cd "$(dirname "$0")" && pwd)"
 claude_bin="${HARNESS_CLAUDE:-claude}"
 timeout_s="${HARNESS_TIMEOUT:-45}"
+config="${HARNESS_CONFIG:-$dir/config.json}"
 
 fail() { echo "classify: $1" >&2; exit 1; }
 
 command -v "$claude_bin" >/dev/null 2>&1 || fail "claude not found"
 input="$(cat)"
 [ -n "${input//[[:space:]]/}" ] || fail "empty prompt"
+
+mode="${HARNESS_MODE:-$(jq -r '.mode // "balanced" | tostring' "$config" 2>/dev/null || true)}"
+[[ "$mode" =~ ^[a-z0-9_-]+$ ]] && [ -f "$dir/modes/$mode.md" ] || mode=balanced
+rules="$dir/prompt.md"
+if [ "$mode" != balanced ]; then
+  rules="$(mktemp)"; trap 'rm -f "$rules"' EXIT
+  cat "$dir/prompt.md" "$dir/modes/$mode.md" > "$rules"
+fi
 
 # The nested claude fires UserPromptSubmit too; hook.sh exits early on this.
 export HARNESS_CLASSIFYING=1
@@ -23,7 +34,7 @@ raw="$(printf '<task>\n%s\n</task>' "$input" |
   perl -e 'alarm shift; exec @ARGV' "$timeout_s" "$claude_bin" -p \
     --model haiku --tools "" --strict-mcp-config \
     --setting-sources project --no-session-persistence --json-schema "$schema" \
-    --system-prompt-file "$dir/prompt.md" --output-format json 2>/dev/null)"
+    --system-prompt-file "$rules" --output-format json 2>/dev/null)"
 rc=$?
 [ "$rc" -eq 142 ] && fail "timed out after ${timeout_s}s"
 [ "$rc" -eq 0 ] || fail "claude exited $rc"
@@ -34,12 +45,12 @@ result="$(jq -er 'select(.is_error == false) | .result' <<<"$raw" 2>/dev/null)" 
 # Models sometimes wrap JSON in ``` fences despite instructions.
 result="$(printf '%s\n' "$result" | sed -e '/^```/d')"
 
-verdict="$(jq -ce '
+verdict="$(jq -ce --arg mode "$mode" '
   select(type == "object")
   | select((.model  | IN("haiku","sonnet","opus","fable"))
        and (.effort | IN("low","medium","high"))
        and (.reason | type == "string" and length > 0))
-  | {model, effort, reason, followup: (.followup == true)}' <<<"$result" 2>/dev/null)" ||
+  | {model, effort, reason, followup: (.followup == true), mode: $mode}' <<<"$result" 2>/dev/null)" ||
   fail "invalid verdict: $(printf '%s' "$result" | tr '\n' ' ' | head -c 200)"
 
 printf '%s\n' "$verdict"

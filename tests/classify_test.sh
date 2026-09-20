@@ -11,6 +11,7 @@ envelope() { jq -cn --arg r "$1" '{result:$r, is_error:false}'; }
 
 run() { # run <fake> -> sets $out, $err, $rc
   out="$(echo 'rename foo to bar' | HARNESS_CLAUDE="$tmp/$1" HARNESS_TIMEOUT="${2:-30}" \
+    HARNESS_CONFIG="$tmp/config.json" \
     "$root/classify" 2>"$tmp/err")"; rc=$?; err="$(cat "$tmp/err")"
 }
 
@@ -20,19 +21,19 @@ $(envelope "$good")
 EOF"
 run ok
 check "ok: exit" "$rc" "0"
-check "ok: verdict" "$out" "$good"
+check "ok: verdict" "$out" "${good%\}},\"mode\":\"balanced\"}"
 
 fake fenced "cat >/dev/null; cat <<'EOF'
 $(envelope "$(printf '```json\n%s\n```' "$good")")
 EOF"
 run fenced
-check "fenced: verdict" "$out" "$good"
+check "fenced: verdict" "$out" "${good%\}},\"mode\":\"balanced\"}"
 
 fake extra "cat >/dev/null; cat <<'EOF'
 $(envelope '{"model":"opus","effort":"high","reason":"r","agent":"x"}')
 EOF"
 run extra
-check "extra fields dropped" "$out" '{"model":"opus","effort":"high","reason":"r","followup":false}'
+check "extra fields dropped" "$out" '{"model":"opus","effort":"high","reason":"r","followup":false,"mode":"balanced"}'
 
 fake badmodel "cat >/dev/null; cat <<'EOF'
 $(envelope '{"model":"gpt","effort":"low","reason":"r","followup":false}')
@@ -77,5 +78,21 @@ check "empty prompt: message" "$(cat "$tmp/err")" "classify: empty prompt"
 fake guard 'cat >/dev/null; jq -cn --arg r "{\"model\":\"haiku\",\"effort\":\"low\",\"reason\":\"guard=$HARNESS_CLASSIFYING\"}" "{result:\$r,is_error:false}"'
 run guard
 check "guard exported" "$(jq -r .reason <<<"$out")" "guard=1"
+
+# modes: the fake reports which "## Mode:" heading its rules file carries
+fake rules 'cat >/dev/null; while [ $# -gt 0 ]; do [ "$1" = --system-prompt-file ] && f="$2"; shift; done
+h="$(grep -m1 "^## Mode:" "$f" || echo none)"
+jq -cn --arg r "{\"model\":\"haiku\",\"effort\":\"low\",\"reason\":\"$h\",\"followup\":false}" "{result:\$r,is_error:false}"'
+run rules
+check "mode: default adds nothing" "$(jq -c '[.reason,.mode]' <<<"$out")" '["none","balanced"]'
+echo '{"mode":"quality"}' > "$tmp/config.json"
+run rules
+check "mode: from config" "$(jq -c '[.reason,.mode]' <<<"$out")" '["## Mode: quality","quality"]'
+out="$(echo 'x' | HARNESS_MODE=cheap HARNESS_CLAUDE="$tmp/rules" HARNESS_CONFIG="$tmp/config.json" "$root/classify")"
+check "mode: env wins" "$(jq -c '[.reason,.mode]' <<<"$out")" '["## Mode: cheap","cheap"]'
+echo '{"mode":"../prompt"}' > "$tmp/config.json"
+run rules
+check "mode: unknown falls back" "$(jq -c '[.reason,.mode]' <<<"$out")" '["none","balanced"]'
+rm -f "$tmp/config.json"
 
 finish
