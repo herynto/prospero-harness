@@ -25,6 +25,9 @@ cx: add a GET /api/orders/:id endpoint like the users one
 | `classify` | prompt on stdin → `{"model","effort","reason"}` on stdout; exits non-zero instead of guessing |
 | `dispatch-hook.sh` | `PreToolUse` hook on `Agent\|Task`: fills in the classifier's model when a subagent dispatch names none; a chosen model is kept and only compared in the log (`"source": "dispatch"`, `chosen`, `applied`). Dispatches to `general-purpose` (or no type) are also retargeted to `harness-<effort>` so the verdict's effort applies; this waits for the classifier (~10s) even when a model was chosen. Other agent types are untouched. Fails open. |
 | `agents/harness-{low,medium,high}.md` | General-purpose worker definitions that differ only in `effort:`. Effort cannot be passed per dispatch, so the hook picks the agent. Install: `ln -s ~/harness/agents/harness-*.md ~/.claude/agents/`. |
+| `config.json` | Preferences read on every dispatch. `pairs` maps a verdict `<model>/<effort>` to the pair that actually runs (e.g. `"opus/medium": "fable/low"`); `override_chosen: true` also replaces a model the session chose; `swap_agents: false` turns the `harness-*` retargeting off. Missing, broken or misspelt entries fall back to the verdict; a bad pair is noted as `config_error` in the log. The log keeps both the verdict (`model`, `effort`) and the outcome (`final_model`, `final_effort`). |
+| `config` | CLI for `config.json`: `config show`, `config set opus/medium fable/low`, `config switch override_chosen true`, `config reset`. |
+| `commands/harness-config.md` | `/harness-config` slash command: edits the preferences interactively through `config`. Install: `ln -s ~/harness/commands/harness-config.md ~/.claude/commands/`. |
 | `hook.sh` | the hook: classifies every prompt into `log.jsonl`; `cx:` prompts also show the verdict and block |
 | `prompt.md` | the classification rules |
 | `log.jsonl` | every classification, git-ignored because it holds prompt text |

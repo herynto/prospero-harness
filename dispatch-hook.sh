@@ -11,6 +11,12 @@ set -uo pipefail
 dir="$(cd "$(dirname "$0")" && pwd)"
 classify="${HARNESS_CLASSIFY:-$dir/classify}"
 log="${HARNESS_LOG:-$dir/log.jsonl}"
+config="${HARNESS_CONFIG:-$dir/config.json}"
+
+# Preferences. A missing or broken config.json means: use the verdict as is.
+cfg() { jq -r "$1" "$config" 2>/dev/null || true; }
+override="$(cfg '.override_chosen == true')"; [ "$override" = true ] || override=false
+swap_agents="$(cfg '.swap_agents != false')"; [ "$swap_agents" = false ] || swap_agents=true
 
 payload="$(cat)"
 input="$(jq -ce '.tool_input | select(type == "object")' 2>/dev/null <<<"$payload")" || exit 0
@@ -18,13 +24,16 @@ brief="$(jq -r '.prompt // ""' <<<"$input")"
 chosen="$(jq -r '.model // ""' <<<"$input")"
 agent="$(jq -r '.subagent_type // ""' <<<"$input")"
 case "$agent" in ""|general-purpose) swap=1 ;; *) swap=0 ;; esac
+[ "$swap_agents" = true ] || swap=0
+[ "$override" = true ] && chosen_kept="" || chosen_kept="$chosen"
 [ -n "$brief" ] || exit 0
 
 now_ms() { perl -MTime::HiRes=time -e 'printf "%d", time*1000'; }
 
-# judge: runs the classifier, appends one log line, prints "<model> <effort>" on success.
+# judge: runs the classifier, maps the verdict through config.json "pairs", appends one
+# log line, prints the final "<model> <effort>" on success.
 judge() {
-  local start errfile verdict rc err ms ts
+  local start errfile verdict rc err ms ts target final cfgerr=""
   start="$(now_ms)"
   errfile="$(mktemp)"
   verdict="$(printf '%s' "$brief" | "$classify" 2>"$errfile")"
@@ -36,11 +45,19 @@ judge() {
     rc=1; err="classifier printed no valid verdict"
   fi
   if [ "$rc" -eq 0 ]; then
-    jq -cn --arg ts "$ts" --arg prompt "$brief" --arg chosen "$chosen" --argjson swap "$swap" --argjson v "$verdict" --argjson ms "$ms" \
-      '{ts:$ts, source:"dispatch", prompt:$prompt[0:2000], ok:true} + ($v | {model,effort,reason})
-       + {chosen:(if $chosen == "" then null else $chosen end), applied:($chosen == ""),
-          agent:(if $swap == 1 then "harness-" + $v.effort else null end), ms:$ms}' >> "$log"
-    jq -r '"\(.model) \(.effort)"' <<<"$verdict"
+    final="$(jq -r '"\(.model)/\(.effort)"' <<<"$verdict")"
+    target="$(jq -r --arg k "$final" '.pairs[$k] // "" | tostring' "$config" 2>/dev/null || true)"
+    if [[ "$target" =~ ^(haiku|sonnet|opus|fable)/(low|medium|high)$ ]]; then final="$target"
+    elif [ -n "$target" ]; then cfgerr="ignored pairs[\"$final\"] = \"$target\""; fi
+    jq -cn --arg ts "$ts" --arg prompt "$brief" --arg chosen "$chosen" --arg kept "$chosen_kept" --argjson swap "$swap" \
+       --arg final "$final" --arg cfgerr "$cfgerr" --argjson v "$verdict" --argjson ms "$ms" \
+      '($final | split("/")) as $f
+       | {ts:$ts, source:"dispatch", prompt:$prompt[0:2000], ok:true} + ($v | {model,effort,reason})
+       + {final_model:(if $kept == "" then $f[0] else $kept end), final_effort:(if $swap == 1 then $f[1] else null end),
+          chosen:(if $chosen == "" then null else $chosen end), applied:($kept == ""),
+          agent:(if $swap == 1 then "harness-" + $f[1] else null end), ms:$ms}
+       + (if $cfgerr == "" then {} else {config_error:$cfgerr} end)' >> "$log"
+    printf '%s\n' "${final/\// }"
   else
     [ -n "$err" ] || err="classifier exited $rc"
     jq -cn --arg ts "$ts" --arg prompt "$brief" --arg chosen "$chosen" --arg error "$err" --argjson ms "$ms" \
@@ -50,7 +67,7 @@ judge() {
   fi
 }
 
-if [ -n "$chosen" ] && [ "$swap" -eq 0 ]; then
+if [ -n "$chosen_kept" ] && [ "$swap" -eq 0 ]; then
   ( judge ) </dev/null >/dev/null 2>&1 &
   exit 0
 fi
@@ -58,7 +75,7 @@ fi
 read -r model effort <<<"$(judge)" || exit 0
 [ -n "$model" ] && [ -n "$effort" ] || exit 0
 jq -cn --argjson input "$input" --arg model "$model" --arg effort "$effort" \
-    --arg chosen "$chosen" --argjson swap "$swap" \
+    --arg chosen "$chosen_kept" --argjson swap "$swap" \
   '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "allow",
     permissionDecisionReason: ("harness: " + (if $chosen == "" then $model else $chosen end) + " · " + $effort),
     updatedInput: ($input

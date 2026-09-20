@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Show or change config.json, the preferences dispatch-hook.sh applies to each verdict.
+#   config show                      table of every pair and both switches
+#   config set <from> <to>           e.g. config set opus/medium fable/low
+#   config switch <name> <true|false>   name: override_chosen | swap_agents
+#   config reset                     every pair maps to itself, switches back to default
+set -uo pipefail
+dir="$(cd "$(dirname "$0")" && pwd)"
+file="${HARNESS_CONFIG:-$dir/config.json}"
+pair='^(haiku|sonnet|opus|fable)/(low|medium|high)$'
+
+defaults() {
+  jq -n '{pairs: ([("haiku","sonnet","opus","fable") as $m | ("low","medium","high") as $e
+    | {key:"\($m)/\($e)", value:"\($m)/\($e)"}] | from_entries), override_chosen:false, swap_agents:true}'
+}
+save() { local tmp; tmp="$(mktemp)"; cat > "$tmp" && mv "$tmp" "$file"; }
+die() { echo "config: $*" >&2; exit 1; }
+
+[ -s "$file" ] || defaults | save
+jq -e 'type == "object"' "$file" >/dev/null 2>&1 || die "$file is not valid JSON; run: config reset"
+
+case "${1:-show}" in
+  show)
+    defaults | jq -r --slurpfile c "$file" '
+      (.pairs | keys_unsorted[]) as $k | ($c[0].pairs[$k] // $k) as $v
+      | "\($k)\t->\t\($v)" + (if $v == $k then "" else "\t*" end)' | column -t -s "$(printf '\t')"
+    jq -r '"override_chosen = \(.override_chosen == true)\nswap_agents     = \(.swap_agents != false)"' "$file" ;;
+  set)
+    [[ "${2:-}" =~ $pair ]] || die "bad pair '${2:-}', want <model>/<effort>, e.g. opus/medium"
+    [[ "${3:-}" =~ $pair ]] || die "bad pair '${3:-}', want <model>/<effort>, e.g. fable/low"
+    jq --arg k "$2" --arg v "$3" '.pairs[$k] = $v' "$file" | save; echo "$2 -> $3" ;;
+  switch)
+    case "${2:-}" in override_chosen|swap_agents) ;; *) die "unknown switch '${2:-}'" ;; esac
+    case "${3:-}" in true|false) ;; *) die "value must be true or false" ;; esac
+    jq --arg k "$2" --argjson v "$3" '.[$k] = $v' "$file" | save; echo "$2 = $3" ;;
+  reset) defaults | save; echo "reset" ;;
+  *) die "usage: config show | set <from> <to> | switch <name> <true|false> | reset" ;;
+esac

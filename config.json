@@ -1,0 +1,18 @@
+{
+  "pairs": {
+    "haiku/low": "haiku/low",
+    "haiku/medium": "haiku/medium",
+    "haiku/high": "haiku/high",
+    "sonnet/low": "sonnet/low",
+    "sonnet/medium": "sonnet/medium",
+    "sonnet/high": "sonnet/high",
+    "opus/low": "opus/low",
+    "opus/medium": "opus/medium",
+    "opus/high": "opus/high",
+    "fable/low": "fable/low",
+    "fable/medium": "fable/medium",
+    "fable/high": "fable/high"
+  },
+  "override_chosen": false,
+  "swap_agents": true
+}

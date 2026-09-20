@@ -10,7 +10,7 @@ stub bad 'cat >/dev/null; echo "classify: timed out after 45s" >&2; exit 1'
 
 run() { # run <stub> <tool_input json>
   jq -cn --argjson i "$2" '{tool_name:"Agent", tool_input:$i}' |
-    HARNESS_CLASSIFY="$tmp/$1" HARNESS_LOG="$tmp/log.jsonl" "$root/dispatch-hook.sh"
+    HARNESS_CLASSIFY="$tmp/$1" HARNESS_LOG="$tmp/log.jsonl" HARNESS_CONFIG="$tmp/config.json" "$root/dispatch-hook.sh"
 }
 wait_log() { for _ in 1 2 3 4 5 6 7 8 9 10; do [ "$(wc -l < "$tmp/log.jsonl" 2>/dev/null || echo 0)" -gt "$1" ] && break; perl -e 'select(undef,undef,undef,0.2)'; done; }
 
@@ -49,5 +49,45 @@ out="$(jq -cn '{tool_input:{prompt:"x"}}' | HARNESS_CLASSIFYING=1 HARNESS_CLASSI
 check "guard: no output" "$out" ""
 out="$(printf 'not json' | HARNESS_CLASSIFY="$tmp/good" HARNESS_LOG="$tmp/log.jsonl" "$root/dispatch-hook.sh" 2>&1)"
 check "junk stdin: silent" "$out" ""
+
+# 5. config.json pairs remap the verdict; a chosen model is still kept
+echo '{"pairs":{"sonnet/medium":"fable/low"}}' > "$tmp/config.json"
+out="$(run good '{"prompt":"implement task 4"}')"
+check "pairs: remapped" "$(jq -c .hookSpecificOutput.updatedInput <<<"$out")" \
+  '{"prompt":"implement task 4","model":"fable","subagent_type":"harness-low"}'
+check "pairs: log" "$(tail -1 "$tmp/log.jsonl" | jq -c '[.model,.effort,.final_model,.final_effort]')" '["sonnet","medium","fable","low"]'
+out="$(run good '{"prompt":"implement task 5","model":"haiku"}')"
+check "pairs: chosen model kept" "$(jq -c .hookSpecificOutput.updatedInput <<<"$out")" \
+  '{"prompt":"implement task 5","model":"haiku","subagent_type":"harness-low"}'
+
+# 6. override_chosen replaces the session's model, for every agent type
+echo '{"pairs":{"sonnet/medium":"fable/low"},"override_chosen":true}' > "$tmp/config.json"
+out="$(run good '{"prompt":"find the routes","model":"haiku","subagent_type":"Explore"}')"
+check "override: updated input" "$(jq -c .hookSpecificOutput.updatedInput <<<"$out")" \
+  '{"prompt":"find the routes","model":"fable","subagent_type":"Explore"}'
+
+# 7. swap_agents off -> type untouched; bad pair ignored and noted in the log
+echo '{"pairs":{"sonnet/medium":"opus/medum"},"swap_agents":false}' > "$tmp/config.json"
+out="$(run good '{"prompt":"implement task 6","subagent_type":"general-purpose"}')"
+check "no swap: updated input" "$(jq -c .hookSpecificOutput.updatedInput <<<"$out")" \
+  '{"prompt":"implement task 6","subagent_type":"general-purpose","model":"sonnet"}'
+check "bad pair: noted" "$(tail -1 "$tmp/log.jsonl" | jq -r .config_error)" 'ignored pairs["sonnet/medium"] = "opus/medum"'
+
+# 8. broken config file -> behaves as with no config
+echo 'not json' > "$tmp/config.json"
+out="$(run good '{"prompt":"implement task 7"}')"
+check "broken config: defaults" "$(jq -c .hookSpecificOutput.updatedInput <<<"$out")" \
+  '{"prompt":"implement task 7","model":"sonnet","subagent_type":"harness-medium"}'
+
+# 9. config CLI
+export HARNESS_CONFIG="$tmp/cli.json"
+"$root/config" set opus/medium fable/low >/dev/null
+check "cli: set" "$(jq -r '.pairs["opus/medium"]' "$tmp/cli.json")" "fable/low"
+check "cli: show marks change" "$("$root/config" show | grep -c '\*')" "1"
+check "cli: bad pair rejected" "$("$root/config" set opus/medum fable/low 2>&1; echo $?)" "$(printf "config: bad pair 'opus/medum', want <model>/<effort>, e.g. opus/medium\n1")"
+"$root/config" switch override_chosen true >/dev/null
+check "cli: switch" "$(jq -r .override_chosen "$tmp/cli.json")" "true"
+"$root/config" reset >/dev/null
+check "cli: reset" "$(jq -c '[.pairs["opus/medium"],.override_chosen]' "$tmp/cli.json")" '["opus/medium",false]'
 
 finish
