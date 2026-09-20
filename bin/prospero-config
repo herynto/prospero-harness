@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
 # Show or change config.json, the preferences dispatch-hook.sh applies to each verdict.
-#   config show                      table of every pair and both switches
-#   config set <from> <to>           e.g. config set opus/medium fable/low
-#   config switch <name> <true|false>   name: override_chosen | swap_agents
-#   config mode [name]               how the classifier weighs doubt: balanced, or any modes/<name>.md
-#   config reset                     every pair maps to itself, switches back to default
-#   config edit                      arrow-key menu for all of the above; run it in a terminal
+#   prospero-config show                      table of every pair and both switches
+#   prospero-config set <from> <to>           e.g. config set opus/medium fable/low
+#   prospero-config switch <name> <true|false>   name: override_chosen | swap_agents
+#   prospero-config mode [name]               how the classifier weighs doubt: balanced, or any modes/<name>.md
+#   prospero-config reset                     every pair maps to itself, switches back to default
+#   prospero-config edit                      arrow-key menu for all of the above; run it in a terminal
 set -uo pipefail
-dir="$(cd "$(dirname "$0")" && pwd)"
-file="${HARNESS_CONFIG:-$dir/config.json}"
+# ~/.prospero/bin/prospero-config is a symlink to this file; follow it to find modes/.
+self="$0"
+while [ -L "$self" ]; do
+  link="$(readlink "$self")"
+  case "$link" in /*) self="$link" ;; *) self="$(dirname "$self")/$link" ;; esac
+done
+dir="$(cd "$(dirname "$self")/.." && pwd)"
+file="${PROSPERO_CONFIG:-${PROSPERO_HOME:-$HOME/.prospero}/config.json}"
+mkdir -p "$(dirname "$file")"
 pair='^(haiku|sonnet|opus|fable)/(low|medium|high)$'
 
 defaults() {
@@ -18,7 +25,7 @@ defaults() {
 modes() { echo balanced; for f in "$dir"/modes/*.md; do [ -f "$f" ] && basename "$f" .md; done; }
 mode_now() { jq -r '.mode // "balanced"' "$file"; }
 save() { local tmp; tmp="$(mktemp)"; cat > "$tmp" && mv "$tmp" "$file"; }
-die() { echo "config: $*" >&2; exit 1; }
+die() { echo "prospero-config: $*" >&2; exit 1; }
 
 # menu <title> <option>...: arrow keys or j/k move, Enter picks, q goes back.
 # Sets MENU_IDX to the picked index, or -1. Draws on stderr, reads keys from stdin.
@@ -45,7 +52,7 @@ menu() {
 }
 
 edit() {
-  [ -t 0 ] || [ -n "${HARNESS_MENU_TEST:-}" ] || die "edit needs a terminal; from Claude Code use: config set <from> <to>"
+  [ -t 0 ] || [ -n "${PROSPERO_MENU_TEST:-}" ] || die "edit needs a terminal; from Claude Code use: prospero-config set <from> <to>"
   local models="haiku sonnet opus fable" efforts="low medium high" keys=() rows=() k v m e on
   while :; do
     keys=(); rows=()
@@ -54,7 +61,7 @@ edit() {
       keys+=("$k"); rows+=("$(printf '%-14s -> %-14s%s' "$k" "$v" "$([ "$v" = "$k" ] || echo ' *')")")
     done; done
     rows+=("mode            = $(mode_now)" "override_chosen = $(jq -r '.override_chosen == true' "$file")" "swap_agents     = $(jq -r '.swap_agents != false' "$file")" "Reset everything" "Quit")
-    menu "Harness preferences: verdict -> what runs   (Enter change, q quit)" "${rows[@]}"
+    menu "Prospero preferences: verdict -> what runs   (Enter change, q quit)" "${rows[@]}"
     case "$MENU_IDX" in
       -1|16) return 0 ;;
       12)
@@ -78,7 +85,7 @@ edit() {
 }
 
 [ -s "$file" ] || defaults | save
-jq -e 'type == "object"' "$file" >/dev/null 2>&1 || die "$file is not valid JSON; run: config reset"
+jq -e 'type == "object"' "$file" >/dev/null 2>&1 || die "$file is not valid JSON; run: prospero-config reset"
 
 case "${1:-show}" in
   show)
@@ -105,5 +112,5 @@ case "${1:-show}" in
     fi ;;
   reset) defaults | save; echo "reset" ;;
   edit) edit ;;
-  *) die "usage: config show | edit | set <from> <to> | mode [name] | switch <name> <true|false> | reset" ;;
+  *) die "usage: prospero-config show | edit | set <from> <to> | mode [name] | switch <name> <true|false> | reset" ;;
 esac

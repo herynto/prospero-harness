@@ -3,6 +3,7 @@ set -uo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 . "$root/tests/lib.sh"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+export PROSPERO_HOME="$tmp/home"; unset CLAUDE_PLUGIN_ROOT
 
 fake() { # fake <name> <body>  -> a stand-in for the claude binary
   printf '#!/usr/bin/env bash\n%s\n' "$2" > "$tmp/$1"; chmod +x "$tmp/$1"
@@ -10,8 +11,8 @@ fake() { # fake <name> <body>  -> a stand-in for the claude binary
 envelope() { jq -cn --arg r "$1" '{result:$r, is_error:false}'; }
 
 run() { # run <fake> -> sets $out, $err, $rc
-  out="$(echo 'rename foo to bar' | HARNESS_CLAUDE="$tmp/$1" HARNESS_TIMEOUT="${2:-30}" \
-    HARNESS_CONFIG="$tmp/config.json" \
+  out="$(echo 'rename foo to bar' | PROSPERO_CLAUDE="$tmp/$1" PROSPERO_TIMEOUT="${2:-30}" \
+    PROSPERO_CONFIG="$tmp/config.json" \
     "$root/classify" 2>"$tmp/err")"; rc=$?; err="$(cat "$tmp/err")"
 }
 
@@ -68,14 +69,14 @@ fake slow "cat >/dev/null; sleep 5"
 run slow 1
 check "timeout: message" "$err" "classify: timed out after 1s"
 
-out="$(echo 'x' | HARNESS_CLAUDE="$tmp/nope" "$root/classify" 2>"$tmp/err")"; rc=$?
+out="$(echo 'x' | PROSPERO_CLAUDE="$tmp/nope" "$root/classify" 2>"$tmp/err")"; rc=$?
 check "missing binary: exit" "$rc" "1"
 check "missing binary: message" "$(cat "$tmp/err")" "classify: claude not found"
 
-out="$(printf '  \n' | HARNESS_CLAUDE="$tmp/ok" "$root/classify" 2>"$tmp/err")"
+out="$(printf '  \n' | PROSPERO_CLAUDE="$tmp/ok" "$root/classify" 2>"$tmp/err")"
 check "empty prompt: message" "$(cat "$tmp/err")" "classify: empty prompt"
 
-fake guard 'cat >/dev/null; jq -cn --arg r "{\"model\":\"haiku\",\"effort\":\"low\",\"reason\":\"guard=$HARNESS_CLASSIFYING\"}" "{result:\$r,is_error:false}"'
+fake guard 'cat >/dev/null; jq -cn --arg r "{\"model\":\"haiku\",\"effort\":\"low\",\"reason\":\"guard=$PROSPERO_CLASSIFYING\"}" "{result:\$r,is_error:false}"'
 run guard
 check "guard exported" "$(jq -r .reason <<<"$out")" "guard=1"
 
@@ -88,7 +89,7 @@ check "mode: default adds nothing" "$(jq -c '[.reason,.mode]' <<<"$out")" '["non
 echo '{"mode":"quality"}' > "$tmp/config.json"
 run rules
 check "mode: from config" "$(jq -c '[.reason,.mode]' <<<"$out")" '["## Mode: quality","quality"]'
-out="$(echo 'x' | HARNESS_MODE=cheap HARNESS_CLAUDE="$tmp/rules" HARNESS_CONFIG="$tmp/config.json" "$root/classify")"
+out="$(echo 'x' | PROSPERO_MODE=cheap PROSPERO_CLAUDE="$tmp/rules" PROSPERO_CONFIG="$tmp/config.json" "$root/classify")"
 check "mode: env wins" "$(jq -c '[.reason,.mode]' <<<"$out")" '["## Mode: cheap","cheap"]'
 echo '{"mode":"../prompt"}' > "$tmp/config.json"
 run rules

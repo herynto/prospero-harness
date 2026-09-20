@@ -1,66 +1,115 @@
-# harness
+# Prospero
 
-A small agent harness for Claude Code, built one layer at a time.
+A Claude Code plugin that decides how much model each piece of work deserves.
+Named after the magician in *The Tempest*, who hands every task to the spirit
+fit for it; the workers it dispatches are called Ariel.
 
-## Stage 1 — classification layer (current)
-
-Type a prompt starting with `cx:` in Claude Code. A `UserPromptSubmit` hook
-sends the text to Haiku, which picks a model and a reasoning effort for the
-task. The verdict is shown and logged, and the prompt is blocked — the task
-does not run. Prompts without `cx:` run as usual; they are classified in the background
-(no delay) and the verdict only goes to `log.jsonl` with `"source": "auto"`.
-
-Follow-ups ("ok continue") carry no work of their own. They reuse the last real
-verdict of the same session (kept in `state/<session_id>.json`) and are logged
-with `inherited_from`. Background prompts of three words or fewer skip the model
-call; longer ones are flagged by the classifier through `"followup": true`.
+- Every subagent dispatch is judged by Haiku first. A dispatch that names no
+  model gets the judged one. A `general-purpose` dispatch is also retargeted to
+  `prospero:ariel-low|medium|high`, because reasoning effort cannot be passed
+  per dispatch and has to come from the agent definition.
+- Every prompt you type is judged in the background, for the log only. It is
+  never delayed or changed. Start a prompt with `cx:` to see the verdict
+  instead of running it.
+- It fails open: if the judge fails or times out, the dispatch runs unchanged.
 
 ```
 cx: add a GET /api/orders/:id endpoint like the users one
 → sonnet · medium — follows an existing pattern across a few files
 ```
 
+## What it costs
+
+Each typed prompt longer than three words and each subagent dispatch starts one
+`claude -p --model haiku` call. A dispatch that gets retargeted waits for it,
+about 10 seconds. Nested subagents are judged at every layer.
+
+## Install
+
+Needs `bash`, `jq`, `perl` and the `claude` CLI on `PATH`.
+
+```
+/plugin marketplace add <owner>/prospero
+/plugin install prospero@prospero
+```
+
+Settings live in `~/.prospero/`, outside the plugin, so updates keep them. The
+first prompt after install creates `~/.prospero/bin/prospero-config`, a stable
+path to the settings CLI. Add it to your shell once:
+
+```bash
+export PATH="$HOME/.prospero/bin:$PATH"
+```
+
+## Settings
+
+`prospero-config` edits `~/.prospero/config.json`. It runs in your terminal and
+costs no tokens. From inside Claude Code use `! prospero-config …`.
+
+| Command | Effect |
+|---------|--------|
+| `prospero-config show` | every pair, the mode and both switches |
+| `prospero-config edit` | arrow-key menu for everything below |
+| `prospero-config set opus/medium sonnet/high` | when the verdict is `opus/medium`, run `sonnet/high` instead |
+| `prospero-config mode [name]` | how the judge weighs doubt: `balanced`, `cheap`, `quality` |
+| `prospero-config switch override_chosen true` | also replace a model the session picked itself |
+| `prospero-config switch swap_agents false` | stop retargeting to `ariel-*`; only the model is filled in |
+| `prospero-config reset` | back to defaults |
+
+No access to `fable`? Map it away once:
+
+```bash
+for e in low medium high; do prospero-config set fable/$e opus/$e; done
+```
+
+Missing, broken or misspelt settings fall back to the verdict; a bad pair is
+noted as `config_error` in the log.
+
+## Files
+
 | File | Job |
 |------|-----|
-| `classify` | prompt on stdin → `{"model","effort","reason"}` on stdout; exits non-zero instead of guessing |
-| `dispatch-hook.sh` | `PreToolUse` hook on `Agent\|Task`: fills in the classifier's model when a subagent dispatch names none; a chosen model is kept and only compared in the log (`"source": "dispatch"`, `chosen`, `applied`). Dispatches to `general-purpose` (or no type) are also retargeted to `harness-<effort>` so the verdict's effort applies; this waits for the classifier (~10s) even when a model was chosen. Other agent types are untouched. Fails open. |
-| `agents/harness-{low,medium,high}.md` | General-purpose worker definitions that differ only in `effort:`. Effort cannot be passed per dispatch, so the hook picks the agent. Install: `ln -s ~/harness/agents/harness-*.md ~/.claude/agents/`. |
-| `config.json` | Preferences read on every dispatch. `pairs` maps a verdict `<model>/<effort>` to the pair that actually runs (e.g. `"opus/medium": "fable/low"`); `override_chosen: true` also replaces a model the session chose; `swap_agents: false` turns the `harness-*` retargeting off. Missing, broken or misspelt entries fall back to the verdict; a bad pair is noted as `config_error` in the log. The log keeps both the verdict (`model`, `effort`) and the outcome (`final_model`, `final_effort`). |
-| `config` | CLI for `config.json`: `config show`, `config set opus/medium fable/low`, `config switch override_chosen true`, `config mode [name]`, `config reset`, and `config edit` for an arrow-key menu (run it in a terminal; it costs no tokens). From inside Claude Code use `! ~/harness/config set …`. |
-| `hook.sh` | the hook: classifies every prompt into `log.jsonl`; `cx:` prompts also show the verdict and block |
-| `prompt.md` | the classification rules |
-| `modes/<name>.md` | Extra rules appended to `prompt.md` when that mode is active, so the classifier itself judges with a different stance. Ships with `cheap` and `quality`; `balanced` is `prompt.md` alone. Pick one with `config mode quality` (stored as `mode` in `config.json`) or per call with `HARNESS_MODE`. Any new `modes/<name>.md` becomes a mode. Unknown names fall back to `balanced`. Every verdict and log line carries the `mode` it was judged in. |
-| `log.jsonl` | every classification, git-ignored because it holds prompt text |
+| `hooks/hooks.json` | registers the two hooks below |
+| `hook.sh` | `UserPromptSubmit`: judges every prompt into the log; `cx:` prompts show the verdict and block. Follow-ups ("ok continue") reuse the session's last verdict: three words or fewer skip the model call, longer ones are flagged by the judge through `"followup": true`. |
+| `dispatch-hook.sh` | `PreToolUse` on `Agent\|Task`: fills in the model, retargets `general-purpose` to `ariel-<effort>`. Other agent types are untouched. |
+| `classify` | text on stdin → `{"model","effort","reason","followup","mode"}` on stdout; exits non-zero instead of guessing |
+| `prompt.md` | the judging rules |
+| `modes/<name>.md` | extra rules appended to `prompt.md` when that mode is active, so the judge itself takes a different stance. Any new file here becomes a mode; unknown names fall back to `balanced`. `PROSPERO_MODE` sets it for one call. |
+| `agents/ariel-{low,medium,high}.md` | general-purpose workers that differ only in `effort:` |
+| `bin/prospero-config` | the settings CLI |
 
-`classify` sets `HARNESS_CLASSIFYING=1` before it calls `claude -p`. That
-nested call fires the hook again; the hook exits at once when it sees the
-variable. Remove the guard and it loops forever.
+Data, all under `~/.prospero/` (`PROSPERO_HOME` moves it):
+
+| File | Holds |
+|------|-------|
+| `config.json` | your settings |
+| `log.jsonl` | one line per judgment: the verdict (`model`, `effort`, `reason`, `mode`) and, for dispatches (`"source": "dispatch"`), the outcome (`final_model`, `final_effort`, `chosen`, `applied`, `agent`). Holds prompt text; never leaves your machine. |
+| `state/<session_id>.json` | the session's last verdict, for follow-ups |
+
+`classify` sets `PROSPERO_CLASSIFYING=1` before it calls `claude -p`. That
+nested call fires the hooks again; they exit at once when they see the
+variable. Remove the guard and it loops forever. Set the same variable on your
+own scripted `claude -p` calls to keep Prospero off them.
+
+## Without the plugin system
+
+Point `hooks.UserPromptSubmit` and `hooks.PreToolUse` (matcher `Agent|Task`,
+`"timeout": 60`) in `~/.claude/settings.json` at `hook.sh` and
+`dispatch-hook.sh`, and link the agents:
+`ln -s "$PWD"/agents/ariel-*.md ~/.claude/agents/`. The agents are then named
+`ariel-*` without the `prospero:` prefix, which the hook handles.
 
 ## Tests
 
 ```bash
-tests/hook_test.sh      # exact, classifier stubbed
-tests/classify_test.sh  # exact, claude stubbed
-tests/run.sh            # real model, 15 labelled prompts, ~2 min
+tests/hook_test.sh           # exact, judge stubbed
+tests/classify_test.sh       # exact, claude stubbed
+tests/dispatch_hook_test.sh  # exact, judge stubbed
+tests/run.sh                 # real model, 15 labelled prompts, ~2 min
 ```
-
-`HARNESS_MODE=quality tests/run.sh` scores another mode against the same labels,
-which were written for `balanced`; read it as "how far does this mode move", not pass/fail.
 
 `tests/run.sh` passes when the model matches on at least 12 of 15 and no
 verdict is more than one tier off. Fix misses in `prompt.md`, never by
-relabelling a case.
-
-## Install
-
-The hook is registered in `~/.claude/settings.json` under
-`hooks.UserPromptSubmit` with `"timeout": 60`, well above the classifier's own
-45s budget so a hook killed before it prints its block JSON can't let the
-prompt run unclassified. To turn it off, delete that entry.
-
-## Next stages
-
-1. Dispatcher — stop blocking; hand the verdict to the main session, which
-   dispatches a subagent with that model.
-2. Agent choice — add an `agent` field to the verdict.
-3. Superpowers — run `classify` before every subagent dispatch.
+relabelling a case. `PROSPERO_MODE=quality tests/run.sh` scores another mode
+against the same labels, which were written for `balanced`; read it as "how far
+does this mode move", not pass/fail.

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Prompt text on stdin -> {"model","effort","reason","followup","mode"} on stdout. Never
-# guesses. The mode (config.json "mode", or HARNESS_MODE) appends modes/<mode>.md to the
+# guesses. The mode (config.json "mode", or PROSPERO_MODE) appends modes/<mode>.md to the
 # rules in prompt.md; "balanced" and unknown names add nothing.
 set -uo pipefail
 
 dir="$(cd "$(dirname "$0")" && pwd)"
-claude_bin="${HARNESS_CLAUDE:-claude}"
-timeout_s="${HARNESS_TIMEOUT:-45}"
-config="${HARNESS_CONFIG:-$dir/config.json}"
+claude_bin="${PROSPERO_CLAUDE:-claude}"
+timeout_s="${PROSPERO_TIMEOUT:-45}"
+config="${PROSPERO_CONFIG:-${PROSPERO_HOME:-$HOME/.prospero}/config.json}"
 
 fail() { echo "classify: $1" >&2; exit 1; }
 
@@ -15,7 +15,7 @@ command -v "$claude_bin" >/dev/null 2>&1 || fail "claude not found"
 input="$(cat)"
 [ -n "${input//[[:space:]]/}" ] || fail "empty prompt"
 
-mode="${HARNESS_MODE:-$(jq -r '.mode // "balanced" | tostring' "$config" 2>/dev/null || true)}"
+mode="${PROSPERO_MODE:-$(jq -r '.mode // "balanced" | tostring' "$config" 2>/dev/null || true)}"
 [[ "$mode" =~ ^[a-z0-9_-]+$ ]] && [ -f "$dir/modes/$mode.md" ] || mode=balanced
 rules="$dir/prompt.md"
 if [ "$mode" != balanced ]; then
@@ -24,7 +24,7 @@ if [ "$mode" != balanced ]; then
 fi
 
 # The nested claude fires UserPromptSubmit too; hook.sh exits early on this.
-export HARNESS_CLASSIFYING=1
+export PROSPERO_CLASSIFYING=1
 
 # Only project settings: keeps the user's CLAUDE.md, plugins and hooks out of the
 # router call. The schema forces a verdict even when the task text reads like orders.

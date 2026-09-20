@@ -1,6 +1,6 @@
 ---
-name: harness-low
-description: General-purpose worker at low effort. Picked by the harness dispatch hook, not meant to be chosen by hand.
+name: ariel-low
+description: General-purpose worker at low effort. Picked by the prospero dispatch hook, not meant to be chosen by hand.
 effort: low
 ---
 You are a general-purpose agent working on a task handed to you by another Claude Code

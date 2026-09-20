@@ -2,16 +2,21 @@
 # PreToolUse hook for subagent dispatches: when the session named no model, fill in the
 # classifier's choice. A model the session did choose is kept; the classifier's opinion
 # is only logged. Effort cannot be passed per dispatch, so general-purpose dispatches are
-# retargeted to agents/harness-<effort>, whose definition carries it. Other agent types
+# retargeted to agents/ariel-<effort>, whose definition carries it. Other agent types
 # are left alone. Never blocks a dispatch: on any failure the call runs unchanged.
 set -uo pipefail
 
-[ -n "${HARNESS_CLASSIFYING:-}" ] && exit 0
+[ -n "${PROSPERO_CLASSIFYING:-}" ] && exit 0
 
 dir="$(cd "$(dirname "$0")" && pwd)"
-classify="${HARNESS_CLASSIFY:-$dir/classify}"
-log="${HARNESS_LOG:-$dir/log.jsonl}"
-config="${HARNESS_CONFIG:-$dir/config.json}"
+classify="${PROSPERO_CLASSIFY:-$dir/classify}"
+# Data lives outside the install dir: a plugin update replaces that directory.
+home="${PROSPERO_HOME:-$HOME/.prospero}"
+log="${PROSPERO_LOG:-$home/log.jsonl}"
+config="${PROSPERO_CONFIG:-$home/config.json}"
+# Agents shipped by a plugin are namespaced with the plugin name.
+prefix=""; [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && prefix="prospero:"
+mkdir -p "$home" 2>/dev/null || exit 0
 
 # Preferences. A missing or broken config.json means: use the verdict as is.
 cfg() { jq -r "$1" "$config" 2>/dev/null || true; }
@@ -49,13 +54,13 @@ judge() {
     target="$(jq -r --arg k "$final" '.pairs[$k] // "" | tostring' "$config" 2>/dev/null || true)"
     if [[ "$target" =~ ^(haiku|sonnet|opus|fable)/(low|medium|high)$ ]]; then final="$target"
     elif [ -n "$target" ]; then cfgerr="ignored pairs[\"$final\"] = \"$target\""; fi
-    jq -cn --arg ts "$ts" --arg prompt "$brief" --arg chosen "$chosen" --arg kept "$chosen_kept" --argjson swap "$swap" \
+    jq -cn --arg ts "$ts" --arg prompt "$brief" --arg chosen "$chosen" --arg kept "$chosen_kept" --argjson swap "$swap" --arg prefix "$prefix" \
        --arg final "$final" --arg cfgerr "$cfgerr" --argjson v "$verdict" --argjson ms "$ms" \
       '($final | split("/")) as $f
        | {ts:$ts, source:"dispatch", prompt:$prompt[0:2000], ok:true} + ($v | {model,effort,reason} + (if .mode then {mode} else {} end))
        + {final_model:(if $kept == "" then $f[0] else $kept end), final_effort:(if $swap == 1 then $f[1] else null end),
           chosen:(if $chosen == "" then null else $chosen end), applied:($kept == ""),
-          agent:(if $swap == 1 then "harness-" + $f[1] else null end), ms:$ms}
+          agent:(if $swap == 1 then $prefix + "ariel-" + $f[1] else null end), ms:$ms}
        + (if $cfgerr == "" then {} else {config_error:$cfgerr} end)' >> "$log"
     printf '%s\n' "${final/\// }"
   else
@@ -75,9 +80,9 @@ fi
 read -r model effort <<<"$(judge)" || exit 0
 [ -n "$model" ] && [ -n "$effort" ] || exit 0
 jq -cn --argjson input "$input" --arg model "$model" --arg effort "$effort" \
-    --arg chosen "$chosen_kept" --argjson swap "$swap" \
+    --arg chosen "$chosen_kept" --argjson swap "$swap" --arg prefix "$prefix" \
   '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "allow",
-    permissionDecisionReason: ("harness: " + (if $chosen == "" then $model else $chosen end) + " · " + $effort),
+    permissionDecisionReason: ("prospero: " + (if $chosen == "" then $model else $chosen end) + " · " + $effort),
     updatedInput: ($input
       + (if $chosen == "" then {model: $model} else {} end)
-      + (if $swap == 1 then {subagent_type: ("harness-" + $effort)} else {} end))}}'
+      + (if $swap == 1 then {subagent_type: ($prefix + "ariel-" + $effort)} else {} end))}}'

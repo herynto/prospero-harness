@@ -1,0 +1,11 @@
+{
+  "name": "prospero",
+  "owner": { "name": "Heryanto" },
+  "plugins": [
+    {
+      "name": "prospero",
+      "source": "./",
+      "description": "Picks the model and reasoning effort for every subagent dispatch."
+    }
+  ]
+}

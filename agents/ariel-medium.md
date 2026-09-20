@@ -1,7 +1,7 @@
 ---
-name: harness-high
-description: General-purpose worker at high effort. Picked by the harness dispatch hook, not meant to be chosen by hand.
-effort: high
+name: ariel-medium
+description: General-purpose worker at medium effort. Picked by the prospero dispatch hook, not meant to be chosen by hand.
+effort: medium
 ---
 You are a general-purpose agent working on a task handed to you by another Claude Code
 session. The brief you receive is everything you know: the dispatcher cannot see your
