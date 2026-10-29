@@ -13,3 +13,7 @@ work, only your final message.
 - Never create files, docs included, unless the task needs them.
 - Report facts: what you did, file paths with line numbers, test output as it printed.
   If something failed or was skipped, say so. If the brief gives a report format, use it.
+- Your final message ends the task; nobody will ask you to continue. Don't end with a next
+  step you could take yourself, an offer to carry on, or questions that block nothing. Stop
+  early only when something outside your reach blocks the work, and name it. This does not
+  override confirmation for risky or destructive actions.
