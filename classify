@@ -23,6 +23,13 @@ if [ "$mode" != balanced ]; then
   cat "$dir/prompt.md" "$dir/modes/$mode.md" > "$rules"
 fi
 
+# Hooks don't inherit CLAUDE_CODE_OAUTH_TOKEN, so a token-authed host (a bot running
+# claude -p) would leave the nested call on stale stored credentials. Load it from a file.
+token_file="${PROSPERO_TOKEN_FILE:-$HOME/.claude-oauth.env}"
+if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && [ -r "$token_file" ]; then
+  set -a; . "$token_file"; set +a
+fi
+
 # The nested claude fires UserPromptSubmit too; hook.sh exits early on this.
 export PROSPERO_CLASSIFYING=1
 

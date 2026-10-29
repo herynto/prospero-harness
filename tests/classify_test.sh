@@ -96,4 +96,12 @@ run rules
 check "mode: unknown falls back" "$(jq -c '[.reason,.mode]' <<<"$out")" '["none","balanced"]'
 rm -f "$tmp/config.json"
 
+# token: hooks get no CLAUDE_CODE_OAUTH_TOKEN, so classify loads it from a file
+fake token 'cat >/dev/null; jq -cn --arg r "{\"model\":\"haiku\",\"effort\":\"low\",\"reason\":\"tok=${CLAUDE_CODE_OAUTH_TOKEN:-none}\"}" "{result:\$r,is_error:false}"'
+echo 'CLAUDE_CODE_OAUTH_TOKEN=from-file' > "$tmp/token.env"
+tok() { echo 'x' | PROSPERO_CLAUDE="$tmp/token" PROSPERO_CONFIG="$tmp/config.json" "$@" "$root/classify" | jq -r .reason; }
+check "token: loaded from file" "$(tok env -u CLAUDE_CODE_OAUTH_TOKEN PROSPERO_TOKEN_FILE="$tmp/token.env")" "tok=from-file"
+check "token: env wins" "$(tok env CLAUDE_CODE_OAUTH_TOKEN=from-env PROSPERO_TOKEN_FILE="$tmp/token.env")" "tok=from-env"
+check "token: missing file is fine" "$(tok env -u CLAUDE_CODE_OAUTH_TOKEN PROSPERO_TOKEN_FILE="$tmp/nope.env")" "tok=none"
+
 finish
