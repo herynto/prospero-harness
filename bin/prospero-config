@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Show or change config.json, the preferences dispatch-hook.sh applies to each verdict.
-#   prospero-config show                      table of every pair and both switches
+#   prospero-config show [--json]             table of every pair and the switches (--json: machine-readable)
 #   prospero-config set <from> <to>           e.g. config set opus/medium fable/low
 #   prospero-config switch <name> <true|false>   name: override_chosen | swap_agents | subagent_first
 #   prospero-config mode [name]               how the classifier weighs doubt: balanced, or any modes/<name>.md
@@ -84,6 +84,9 @@ edit() {
   done
 }
 
+# reset must work on a corrupt file, so it runs before the validity check.
+if [ "${1:-}" = reset ]; then defaults | save; echo "reset"; exit; fi
+
 [ -s "$file" ] || defaults | save
 jq -e 'type == "object"' "$file" >/dev/null 2>&1 || die "$file is not valid JSON; run: prospero-config reset"
 
@@ -117,7 +120,6 @@ case "${1:-show}" in
       case $'\n'"$(modes)"$'\n' in *$'\n'"$2"$'\n'*) ;; *) false ;; esac || die "unknown mode '$2', have: $(modes | tr '\n' ' ')"
       jq --arg v "$2" '.mode = $v' "$file" | save; echo "mode = $2"
     fi ;;
-  reset) defaults | save; echo "reset" ;;
   edit) edit ;;
   *) die "usage: prospero-config show | edit | set <from> <to> | mode [name] | switch <name> <true|false> | reset" ;;
 esac

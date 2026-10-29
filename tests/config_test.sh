@@ -35,4 +35,14 @@ echo '{"pairs":{"fable/low":"opus/medium"},"mode":"cheap","swap_agents":false}' 
 cmp -s "$tmp/plain" "$root/tests/config_show.golden"
 check "show: plain unchanged" "$?" "0"
 
+for bad in '{bad' '[1]'; do
+  printf '%s' "$bad" > "$PROSPERO_CONFIG"
+  out="$("$cfg" reset)"; rc=$?
+  check "reset repairs $bad: exit" "$rc" "0"
+  check "reset repairs $bad: output" "$out" "reset"
+  check "reset repairs $bad: mode" "$(json .mode)" "balanced"
+  "$cfg" show --json | jq -e type >/dev/null 2>&1
+  check "reset repairs $bad: valid" "$?" "0"
+done
+
 finish
