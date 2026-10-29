@@ -52,6 +52,7 @@ costs no tokens. From inside Claude Code use `! prospero-config …`.
 | Command | Effect |
 |---------|--------|
 | `prospero-config show` | every pair, the mode and both switches |
+| `prospero-config show --json` | Same, as one JSON object (for bots) |
 | `prospero-config edit` | arrow-key menu for everything below |
 | `prospero-config set opus/medium sonnet/high` | when the verdict is `opus/medium`, run `sonnet/high` instead |
 | `prospero-config mode [name]` | how the judge weighs doubt: `balanced`, `cheap`, `quality` |

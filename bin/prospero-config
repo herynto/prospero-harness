@@ -89,6 +89,13 @@ jq -e 'type == "object"' "$file" >/dev/null 2>&1 || die "$file is not valid JSON
 
 case "${1:-show}" in
   show)
+    if [ "${2:-}" = --json ]; then
+      defaults | jq --slurpfile c "$file" '$c[0] as $c | {
+        mode: ($c.mode // "balanced"), modes: $ARGS.positional,
+        switches: {override_chosen: ($c.override_chosen == true), swap_agents: ($c.swap_agents != false), subagent_first: ($c.subagent_first != false)},
+        pairs: (.pairs | with_entries(.value = ($c.pairs[.key] // .key)))}' --args $(modes)
+      exit
+    fi
     defaults | jq -r --slurpfile c "$file" '
       (.pairs | keys_unsorted[]) as $k | ($c[0].pairs[$k] // $k) as $v
       | "\($k)\t->\t\($v)" + (if $v == $k then "" else "\t*" end)' | column -t -s "$(printf '\t')"

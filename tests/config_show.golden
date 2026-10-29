@@ -1,0 +1,16 @@
+haiku/low      ->  haiku/low
+haiku/medium   ->  haiku/medium
+haiku/high     ->  haiku/high
+sonnet/low     ->  sonnet/low
+sonnet/medium  ->  sonnet/medium
+sonnet/high    ->  sonnet/high
+opus/low       ->  opus/low
+opus/medium    ->  opus/medium
+opus/high      ->  opus/high
+fable/low      ->  opus/medium    *
+fable/medium   ->  fable/medium
+fable/high     ->  fable/high
+mode            = cheap
+override_chosen = false
+swap_agents     = false
+subagent_first  = true
