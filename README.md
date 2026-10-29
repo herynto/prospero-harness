@@ -97,6 +97,11 @@ nested call fires the hooks again; they exit at once when they see the
 variable. Remove the guard and it loops forever. Set the same variable on your
 own scripted `claude -p` calls to keep Prospero off them.
 
+Hooks don't inherit `CLAUDE_CODE_OAUTH_TOKEN`. When it is unset, `classify`
+loads it from `~/.claude-oauth.env` (`PROSPERO_TOKEN_FILE` moves it), so a bot
+that authenticates with a token doesn't leave the nested call on expired
+stored credentials.
+
 ## Without the plugin system
 
 Point `hooks.UserPromptSubmit`, `hooks.PreToolUse` (matcher `Agent|Task`,
