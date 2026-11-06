@@ -23,5 +23,12 @@ ask permission; dispatch and say in one clause that you did.
 - **Write the brief to stand alone.** The subagent cannot see this conversation:
   give it the absolute paths, the exact question, and the shape of answer you
   want back (file paths and line numbers, not a summary).
+- **End every brief with the stop rule.** A subagent's final message ends its
+  task, so close the brief with: "Your final message ends the task; nobody will
+  ask you to continue. Don't end with a next step you could take yourself, an
+  offer to carry on, or questions that block nothing. Stop early only when
+  something outside your reach blocks the work, and name it."
+- **A skill that says to fan out** is the user asking for subagents — dispatch
+  without asking first.
 
 This policy can be turned off with `prospero-config switch subagent_first false`.
